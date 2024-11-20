@@ -1,0 +1,125 @@
+from typing import List
+from tqdm import tqdm
+import os
+import math
+
+import torch
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from models import OLAModel
+
+
+def preprocess_attn_map(attn_map: torch.Tensor):
+    return attn_map.mean(dim=1).squeeze(0).cpu().detach().numpy()
+
+
+def draw_attn_heatmap(input_map: torch.Tensor, 
+                      xtick_ls, ytick_ls, title, amplify=False):
+
+    def custom_fmt(ori, prob):
+        return '{:.3f}\n{:.2f}'.format(prob, ori).lstrip('0')
+    
+    input_map = preprocess_attn_map(input_map)
+    prob_array = input_map / (input_map.sum(axis=1, keepdims=True) + 1e-10)
+    if amplify:
+        show_array = input_map / (input_map.max(axis=1, keepdims=True) + 1e-10) 
+    else:
+        show_array = input_map
+    plt.title(title)
+    center = show_array.min() + 0.3 * (show_array.max() - show_array.min())
+    ax = sns.heatmap(data=show_array, cmap='rainbow', center=center,
+                     vmax=show_array.max(), vmin=show_array.min(), annot=False, 
+                     square=True, linewidths=0, cbar_kws={"shrink":.2}, 
+                     xticklabels=xtick_ls, yticklabels=ytick_ls)
+    # add text
+    for i in range(prob_array.shape[0]):
+        for j in range(prob_array.shape[1]):
+            fw = 'normal'
+            ax.text(j + 0.5, i + 0.5, 
+                    custom_fmt(input_map[i, j], prob_array[i, j]),
+                    ha='center', va='center', 
+                    fontsize=1, fontweight=fw)
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=3)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=3)
+    plt.xlabel('K')
+    plt.ylabel('Q')
+
+
+def visualize_attn_map(
+    visual_models_name_list: List[str],
+    use_orders: List[int],
+    text_list: List[str],
+    output_dir: str,
+    cutoff_len: int = 320,
+):
+    ola_dict = {}
+    ola_mask_dict = {}
+    model_dict = {}
+    # calculate ola
+    for tmp_model_name in visual_models_name_list:
+        tmp_model = OLAModel(
+            base_model_name_or_path=tmp_model_name,
+            adapter_architecture="resnet18",
+            num_classes=2,
+            use_orders=use_orders,
+            remove_outliers=False
+        ).eval().cuda()
+        model_dict[tmp_model_name] = tmp_model
+        ola_list = []
+        ola_mask_list = []
+        with torch.no_grad():
+            for tmp_text in text_list:
+                ola, ola_mask = tmp_model.cal_ola_from_text([tmp_text], cutoff_len)
+                ola = {k: v.cpu() for k, v in ola.items()}
+                ola_list.append(ola)
+                for k, v in ola_mask.items():
+                    if isinstance(v, torch.Tensor):
+                        ola_mask[k] = v.cpu()
+                    elif isinstance(v, dict):
+                        for kk, vv in v.items():
+                            ola_mask[k][kk] = vv.cpu() if isinstance(vv, torch.Tensor) else vv
+                ola_mask_list.append(ola_mask)
+        tmp_model = tmp_model.cpu()
+        ola_dict[tmp_model_name] = ola_list
+        ola_mask_dict[tmp_model_name] = ola_mask_list
+    # visualize
+    for text_id in range(len(text_list)):
+        for order in use_orders:
+            title = f"Text: {text_list[text_id]}"
+            title = title.split(" ")
+            row_words = 40
+            title = [" ".join(title[i*row_words:(i+1)*row_words]) for i in range(len(title)//40)]
+            title = "\n".join(title)
+            title += f"\nOrder: {order}"
+            plt.suptitle(title)
+            rows = 2
+            columus = len(visual_models_name_list)
+            for tmp_c in tqdm(range(columus), desc=f"Drawing text {text_id} order {order}"):
+                tmp_model_name = visual_models_name_list[tmp_c]
+                attn_map = ola_dict[tmp_model_name][text_id][order]
+                outliers_mask = ola_mask_dict[tmp_model_name][text_id]['outliers_mask'][order]
+                input_ids = model_dict[tmp_model_name].tokenizer(
+                    text_list[text_id],
+                    truncation=True,
+                    max_length=cutoff_len,
+                    padding=False,
+                    return_tensors=None,
+                )["input_ids"]
+                tick_ls = [model_dict[tmp_model_name].tokenizer.decode(tmp_id)
+                           for tmp_id in input_ids]
+                # draw original attn map
+                plt.subplot(rows, columus, tmp_c+1)
+                sub_title = tmp_model_name
+                draw_attn_heatmap(attn_map, tick_ls, tick_ls, sub_title)
+                # draw attn map without outliers
+                plt.subplot(rows, columus, tmp_c+columus+1)
+                sub_title = tmp_model_name + " rm_outliers"
+                draw_attn_heatmap(attn_map*(1-outliers_mask), tick_ls, tick_ls, sub_title)
+            # save figure
+            plt.gcf().set_size_inches(columus * 9 + 4, 22)
+            os.makedirs(output_dir, exist_ok=True)
+            save_path = os.path.join(output_dir, f"text_id_{text_id}_order_{order}.png")
+            plt.savefig(save_path, dpi=450)
+            plt.clf()
+            print(f"Save to {save_path}")
