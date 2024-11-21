@@ -59,6 +59,10 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether to remove outliers from attention maps."},
     )
+    outliers_sigma_multiplier: float = field(
+        default=3.0,
+        metadata={"help": "The sigma multiplier to determine outliers."},
+    )
     eval_models_name_list: List[str] = field(
         default_factory=lambda: [],
         metadata={"help": "The list of models to evaluate."},

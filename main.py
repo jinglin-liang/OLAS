@@ -86,6 +86,7 @@ def main():
             num_classes=data_args.num_classes,
             use_orders=model_args.use_orders,
             remove_outliers=model_args.remove_outliers,
+            outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
             local_files_only=model_args.local_files_only
         )
         model.print_trainable_parameters()
@@ -135,7 +136,8 @@ def main():
                 adapter_architecture=model_args.adapter_architecture,
                 num_classes=data_args.num_classes,
                 use_orders=model_args.use_orders,
-                remove_outliers=model_args.remove_outliers
+                remove_outliers=model_args.remove_outliers,
+                outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
@@ -151,6 +153,9 @@ def main():
 
     # do visualize
     if training_args.do_visualize:
+        # save arguments
+        save_arguments([model_args, data_args, training_args], 
+                    os.path.join(training_args.output_dir, "args.json"))
         with open(data_args.visual_text_file, "r") as f:
             text_list = f.readlines()
         text_list = [text.rstrip('\n') for text in text_list]
@@ -160,6 +165,7 @@ def main():
             text_list,
             training_args.output_dir,
             data_args.cutoff_len,
+            model_args.outliers_sigma_multiplier,
         )
 
 

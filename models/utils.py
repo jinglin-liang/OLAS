@@ -58,12 +58,12 @@ def get_outliers_mask(attn_map, interested_masked=None, sigma_multiplier=None):
         outliers_mask = (attn_map > upper_bound)
     else:
         outliers_mask = torch.zeros_like(attn_map)
-    # argmax_mask = (attn_map == attn_map.max(dim=-1, keepdim=True)[0])
-    # outliers_mask = torch.logical_or(outliers_mask, argmax_mask).int()
+    argmax_mask = (attn_map == attn_map.max(dim=-1, keepdim=True)[0])
+    outliers_mask = torch.logical_or(outliers_mask, argmax_mask).int()
     return outliers_mask.int()
 
 
-def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=None):
+def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=None, sigma_multiplier=3.0):
     if use_orders is None:
         use_orders = [1, 2, 3]
     order_to_attn_map = combine_attention_orders(attn_maps, attention_mask, use_orders)
@@ -77,7 +77,7 @@ def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=N
         if k == 0:
             outliers_mask[k] = torch.zeros_like(v)
         else:
-            outliers_mask[k] = get_outliers_mask(v, interested_mask, sigma_multiplier=3)
+            outliers_mask[k] = get_outliers_mask(v, interested_mask, sigma_multiplier=sigma_multiplier)
     maskes = {
         "unpadding_mask": unpadding_mask,
         "interested_mask": interested_mask,

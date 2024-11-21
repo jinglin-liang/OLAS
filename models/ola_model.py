@@ -22,12 +22,14 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 
-def preprocess_ola(ola, ola_mask, remove_outliers=False):
+def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True):
     stack_ola_tensor = torch.cat([v for _, v in ola.items()], dim=1)
     if remove_outliers:
         outliers_mask = ola_mask["outliers_mask"]
         outliers_mask_tensor = torch.cat([v for _, v in outliers_mask.items()], dim=1)
         stack_ola_tensor = stack_ola_tensor * (1 - outliers_mask_tensor)
+    if regularize:
+        stack_ola_tensor = stack_ola_tensor / (stack_ola_tensor.sum(dim=-1, keepdim=True) + 1e-10)
     return stack_ola_tensor
 
 
@@ -61,11 +63,13 @@ class OLAModel(nn.Module):
         use_orders: List[int] = [1, 2, 3],
         remove_outliers: bool = False,
         local_files_only: bool = True,
+        outliers_sigma_multiplier: float = 3.0,
         **kwargs,
     ):
         super(OLAModel, self).__init__()
         self._init_base_model(base_model_name_or_path, local_files_only)
-        self._init_ola_adaptor(adapter_architecture, num_classes, use_orders, remove_outliers)
+        self._init_ola_adaptor(adapter_architecture, num_classes, 
+                               use_orders, remove_outliers, outliers_sigma_multiplier)
         self._init_learnable_params()
 
     def _init_base_model(self, base_model_name_or_path, local_files_only):
@@ -90,8 +94,10 @@ class OLAModel(nn.Module):
         # is causal language model
         self.is_casual = is_causal_lm(self.base_model.config.model_type)
 
-    def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, remove_outliers):
+    def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
+                          remove_outliers, outliers_sigma_multiplier):
         self.remove_outliers = remove_outliers
+        self.outliers_sigma_multiplier = outliers_sigma_multiplier
         self.use_orders = use_orders
         self.num_classes = num_classes
         if adapter_architecture == "resnet18":
@@ -158,12 +164,13 @@ class OLAModel(nn.Module):
             output.attentions, 
             attention_mask, 
             is_casual=self.is_casual,
-            use_orders=self.use_orders
+            use_orders=self.use_orders,
+            sigma_multiplier=self.outliers_sigma_multiplier
         )
         # preprocess ola
-        ola_map = preprocess_ola(ola, ola_mask, remove_outliers=self.remove_outliers)
+        stack_ola_tensor = preprocess_ola(ola, ola_mask, remove_outliers=self.remove_outliers)
         # adaptor forward
-        prediction_scores = self.adaptor(ola_map)
+        prediction_scores = self.adaptor(stack_ola_tensor)
         # calculate loss
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()

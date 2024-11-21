@@ -52,6 +52,7 @@ def visualize_attn_map(
     text_list: List[str],
     output_dir: str,
     cutoff_len: int = 320,
+    outliers_sigma_multiplier: float = 3.0,
 ):
     ola_dict = {}
     ola_mask_dict = {}
@@ -63,7 +64,8 @@ def visualize_attn_map(
             adapter_architecture="resnet18",
             num_classes=2,
             use_orders=use_orders,
-            remove_outliers=False
+            remove_outliers=False,
+            outliers_sigma_multiplier=outliers_sigma_multiplier,
         ).eval().cuda()
         model_dict[tmp_model_name] = tmp_model
         ola_list = []
@@ -89,7 +91,7 @@ def visualize_attn_map(
             title = f"Text: {text_list[text_id]}"
             title = title.split(" ")
             row_words = 40
-            title = [" ".join(title[i*row_words:(i+1)*row_words]) for i in range(len(title)//40)]
+            title = [" ".join(title[i*row_words:(i+1)*row_words]) for i in range(math.ceil(len(title)/row_words))]
             title = "\n".join(title)
             title += f"\nOrder: {order}"
             plt.suptitle(title)
