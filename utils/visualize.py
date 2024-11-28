@@ -15,7 +15,9 @@ def preprocess_attn_map(attn_map: torch.Tensor):
 
 
 def draw_attn_heatmap(input_map: torch.Tensor, 
-                      xtick_ls, ytick_ls, title, amplify=False):
+                      xtick_ls, ytick_ls, title, 
+                      annot_size=1, label_size=3,
+                      amplify=False):
 
     def custom_fmt(ori, prob):
         return '{:.3f}\n{:.2f}'.format(prob, ori).lstrip('0')
@@ -39,9 +41,9 @@ def draw_attn_heatmap(input_map: torch.Tensor,
             ax.text(j + 0.5, i + 0.5, 
                     custom_fmt(input_map[i, j], prob_array[i, j]),
                     ha='center', va='center', 
-                    fontsize=1, fontweight=fw)
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=3)
-    ax.set_yticklabels(ax.get_yticklabels(), fontsize=3)
+                    fontsize=annot_size, fontweight=fw)
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=label_size)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=label_size)
     plt.xlabel('K')
     plt.ylabel('Q')
 
@@ -53,6 +55,8 @@ def visualize_attn_map(
     output_dir: str,
     cutoff_len: int = 320,
     outliers_sigma_multiplier: float = 3.0,
+    annot_size: int = 1,
+    label_size: int = 3,
 ):
     ola_dict = {}
     ola_mask_dict = {}
@@ -61,7 +65,7 @@ def visualize_attn_map(
     for tmp_model_name in visual_models_name_list:
         tmp_model = OLAModel(
             base_model_name_or_path=tmp_model_name,
-            adapter_architecture="resnet18",
+            adapter_architecture="textcls_resnet18",
             num_classes=2,
             use_orders=use_orders,
             remove_outliers=False,
@@ -113,11 +117,11 @@ def visualize_attn_map(
                 # draw original attn map
                 plt.subplot(rows, columus, tmp_c+1)
                 sub_title = tmp_model_name
-                draw_attn_heatmap(attn_map, tick_ls, tick_ls, sub_title)
+                draw_attn_heatmap(attn_map, tick_ls, tick_ls, sub_title, annot_size, label_size)
                 # draw attn map without outliers
                 plt.subplot(rows, columus, tmp_c+columus+1)
                 sub_title = tmp_model_name + " rm_outliers"
-                draw_attn_heatmap(attn_map*(1-outliers_mask), tick_ls, tick_ls, sub_title)
+                draw_attn_heatmap(attn_map*(1-outliers_mask), tick_ls, tick_ls, sub_title, annot_size, label_size)
             # save figure
             plt.gcf().set_size_inches(columus * 9 + 4, 22)
             os.makedirs(output_dir, exist_ok=True)

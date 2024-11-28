@@ -14,6 +14,8 @@ from utils import (
     save_arguments,
     evaluate_ola_adapter,
     visualize_attn_map,
+    TextClsMetric,
+    TokenClsMetric,
     ModelArguments, 
     DataArguments, 
     OLALMTrainingArguments as TrainingArguments,
@@ -120,6 +122,7 @@ def main():
             eval_adapter_checkpoint = model_args.eval_adapter_checkpoint
         # evaluate each model
         for eval_model_name in model_args.eval_models_name_list:
+            print(f"Evaluating model {eval_model_name}")
             # load eval dataset
             eval_dataset, data_collator = data_manager.get_dataset_collator(
                 eval_model_name, "test"
@@ -130,6 +133,15 @@ def main():
                 batch_size=training_args.per_device_eval_batch_size,
                 shuffle=False,
             )
+            # load eval metric
+            if data_args.dataset_name.lower() == "imdb":
+                eval_metric = TextClsMetric()
+            elif data_args.dataset_name.lower() == "conll2000":
+                eval_metric = TokenClsMetric(
+                    label_names=eval_dataset.features["pos_tags"].feature.names + ["[None]"]
+                )
+            else:
+                raise NotImplemented
             # create OLAModel
             model = OLAModel(
                 base_model_name_or_path=eval_model_name,
@@ -146,6 +158,7 @@ def main():
             # evaluate
             evaluate_ola_adapter(
                 eval_dataloader=eval_dataloader,
+                eval_metric=eval_metric,
                 eval_ola_model=model,
                 eval_adapter_ckpt=eval_adapter_checkpoint,
                 output_dir=output_dir,
@@ -166,6 +179,8 @@ def main():
             training_args.output_dir,
             data_args.cutoff_len,
             model_args.outliers_sigma_multiplier,
+            data_args.visual_annot_size,
+            data_args.visual_label_size,
         )
 
 

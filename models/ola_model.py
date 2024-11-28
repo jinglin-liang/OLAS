@@ -9,6 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.utils import get_order_level_attention
+from models.adapters import AxialTransformerAdapter
 
 
 def is_causal_lm(model_type: str) -> bool:
@@ -77,14 +78,14 @@ class OLAModel(nn.Module):
         # load config
         config = AutoConfig.from_pretrained(
             base_model_name_or_path, 
-            local_files_only=local_files_only, 
-            trust_remote_code=True
+            local_files_only=local_files_only
         )
         # load base model
         model_class = getattr(__import__('transformers'), config.architectures[0])
         self.base_model = model_class.from_pretrained(
             base_model_name_or_path, config=config,
-            local_files_only=local_files_only, trust_remote_code=True
+            local_files_only=local_files_only, 
+            attn_implementation="eager"
         )
         # load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -96,11 +97,12 @@ class OLAModel(nn.Module):
 
     def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
                           remove_outliers, outliers_sigma_multiplier):
+        self.adapter_architecture = adapter_architecture
         self.remove_outliers = remove_outliers
         self.outliers_sigma_multiplier = outliers_sigma_multiplier
         self.use_orders = use_orders
         self.num_classes = num_classes
-        if adapter_architecture == "resnet18":
+        if adapter_architecture == "textcls_resnet18":
             self.adaptor = resnet18(pretrained=False, num_classes=num_classes)
             self.adaptor.conv1 = nn.Conv2d(
                 len(use_orders), self.adaptor.conv1.out_channels, 
@@ -110,6 +112,8 @@ class OLAModel(nn.Module):
                 self.adaptor.conv1.weight, 
                 mode="fan_out", nonlinearity="relu"
             )
+        elif adapter_architecture == "tokencls_axialtranformer":
+            self.adaptor = AxialTransformerAdapter(len(use_orders), num_classes)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -169,14 +173,28 @@ class OLAModel(nn.Module):
         )
         # preprocess ola
         stack_ola_tensor = preprocess_ola(ola, ola_mask, remove_outliers=self.remove_outliers)
-        # adaptor forward
-        prediction_scores = self.adaptor(stack_ola_tensor)
-        # calculate loss
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(prediction_scores, labels)
+        if "textcls" in self.adapter_architecture:
+            # adaptor forward
+            prediction_scores = self.adaptor(stack_ola_tensor)
+            # calculate loss
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(prediction_scores, labels)
+            else:
+                loss = None
+        elif "tokencls" in self.adapter_architecture:
+            # adaptor forward
+            prediction_scores = self.adaptor(stack_ola_tensor)
+            idx_tensor = torch.arange(prediction_scores.size(-1)).to(prediction_scores.device)
+            prediction_scores = prediction_scores[:, :, idx_tensor, idx_tensor]
+            prediction_scores = prediction_scores.transpose(1, 2).contiguous()
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
+            else:
+                loss = None
         else:
-            loss = None
+            raise NotImplementedError(f"Adapter architecture {self.adapter_architecture} is not supported.")
         # return output
         return OLALMOutput(
             logits=prediction_scores,

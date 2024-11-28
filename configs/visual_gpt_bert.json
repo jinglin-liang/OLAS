@@ -14,7 +14,9 @@
         2,
         3
     ],
-    "visual_text_file": "datasets/visualize/all_text.txt",
+    "visual_text_file": "datasets/visualize/posi_neg_pairs1.txt",
+    "visual_annot_size": 7,
+    "visual_label_size": 14,
     "visual_models_name_list": [
         "pretrained_models/openai-community-gpt2",
         "pretrained_models/openai-community-gpt2-medium",

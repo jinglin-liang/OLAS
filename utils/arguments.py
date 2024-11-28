@@ -28,7 +28,7 @@ class ModelArguments:
         }
     )
     adapter_architecture: Optional[str] = field(
-        default="resnet18",
+        default="textcls_resnet18",
         metadata={
             "help": "The architecture of the adapter to use."
         },
@@ -102,11 +102,23 @@ class DataArguments:
         default="datasets/visualize/all_text.txt",
         metadata={"help": "The file containing texts to visual attention maps."},
     )
+    visual_annot_size: int = field(
+        default=1,
+        metadata={"help": "The size of each annotation in the visualization."},
+    )
+    visual_label_size: int = field(
+        default=3,
+        metadata={"help": "The size of the label in the visualization."},
+    )
 
     def __post_init__(self):
         if self.num_classes is None:
             if self.dataset_name == "imdb":
                 self.num_classes = 2
+            elif self.dataset_name == "conll2000":
+                # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
+                self.num_classes = 44 + 1
+                # self.num_classes = 23 + 1
             else:
                 raise ValueError(f"Dataset {self.dataset_name} is not supported.")
 
