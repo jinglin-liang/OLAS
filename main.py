@@ -138,7 +138,8 @@ def main():
                 eval_metric = TextClsMetric()
             elif data_args.dataset_name.lower() == "conll2000":
                 eval_metric = TokenClsMetric(
-                    label_names=eval_dataset.features["pos_tags"].feature.names + ["[None]"]
+                    label_names=eval_dataset.features["pos_tags"].feature.names,
+                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             else:
                 raise NotImplemented

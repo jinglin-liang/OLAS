@@ -45,8 +45,9 @@ def conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_n
         ret_pos_tags.append(len(pos_tags_names))
         ret_chunk_tags.append(chunk_tags_names.index("O"))
     for tmp_word, tmp_pos, tmp_chunk in zip(tokens, pos_tags, chunk_tags):
+        # add " " to tmp_word to avoid LM such as GPT2 to ignore the space
         tokenized_word = tokenizer(
-            tmp_word,
+            " " + tmp_word,
             truncation=True,
             max_length=cutoff_len,
             padding=False,

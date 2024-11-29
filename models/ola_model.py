@@ -8,7 +8,7 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
-from models.utils import get_order_level_attention
+from models.ola_utils import get_order_level_attention
 from models.adapters import AxialTransformerAdapter
 
 
@@ -23,14 +23,19 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 
-def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True):
+def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False):
     stack_ola_tensor = torch.cat([v for _, v in ola.items()], dim=1)
     if remove_outliers:
         outliers_mask = ola_mask["outliers_mask"]
         outliers_mask_tensor = torch.cat([v for _, v in outliers_mask.items()], dim=1)
-        stack_ola_tensor = stack_ola_tensor * (1 - outliers_mask_tensor)
+        stack_ola_tensor_wo_ol = stack_ola_tensor * (1 - outliers_mask_tensor)
+        stack_ola_tensor = torch.cat([stack_ola_tensor, stack_ola_tensor_wo_ol], dim=1)
     if regularize:
         stack_ola_tensor = stack_ola_tensor / (stack_ola_tensor.sum(dim=-1, keepdim=True) + 1e-10)
+    if is_casual:
+        mask_t = torch.triu(torch.ones(stack_ola_tensor.size(-1), stack_ola_tensor.size(-1)), diagonal=1).to(stack_ola_tensor)
+        tensor_t = stack_ola_tensor.transpose(-1, -2) * mask_t.expand_as(stack_ola_tensor)
+        stack_ola_tensor = stack_ola_tensor + tensor_t
     return stack_ola_tensor
 
 
@@ -102,10 +107,11 @@ class OLAModel(nn.Module):
         self.outliers_sigma_multiplier = outliers_sigma_multiplier
         self.use_orders = use_orders
         self.num_classes = num_classes
+        ola_input_channal = len(use_orders) * (1 + int(remove_outliers))
         if adapter_architecture == "textcls_resnet18":
             self.adaptor = resnet18(pretrained=False, num_classes=num_classes)
             self.adaptor.conv1 = nn.Conv2d(
-                len(use_orders), self.adaptor.conv1.out_channels, 
+                ola_input_channal, self.adaptor.conv1.out_channels, 
                 kernel_size=7, stride=2, padding=3, bias=False
             )
             nn.init.kaiming_normal_(
@@ -113,7 +119,7 @@ class OLAModel(nn.Module):
                 mode="fan_out", nonlinearity="relu"
             )
         elif adapter_architecture == "tokencls_axialtranformer":
-            self.adaptor = AxialTransformerAdapter(len(use_orders), num_classes)
+            self.adaptor = AxialTransformerAdapter(ola_input_channal, num_classes)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -172,7 +178,11 @@ class OLAModel(nn.Module):
             sigma_multiplier=self.outliers_sigma_multiplier
         )
         # preprocess ola
-        stack_ola_tensor = preprocess_ola(ola, ola_mask, remove_outliers=self.remove_outliers)
+        stack_ola_tensor = preprocess_ola(
+            ola, ola_mask, 
+            remove_outliers=self.remove_outliers, 
+            is_casual=self.is_casual
+        )
         if "textcls" in self.adapter_architecture:
             # adaptor forward
             prediction_scores = self.adaptor(stack_ola_tensor)

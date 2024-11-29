@@ -8,6 +8,7 @@ from tqdm import tqdm
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
 
 from models import OLAModel
 
@@ -57,8 +58,13 @@ class TextClsMetric:
 class TokenClsMetric(TextClsMetric):
     total_tokens_num: int = 0
     correct_tokens_num: int = 0
-    token_level_accuracy: float = 0
-    label_names: List[str] = None
+    line_level_accuracy: float = 0
+    label_names: Optional[List[str]] = None
+    tokenizer: Optional[AutoTokenizer] = None
+
+    def __post_init__(self):
+        if self.label_names is not None:
+            self.label_names.append("[None]")
 
     def judge(self, predictions: Tensor, labels: Tensor, data: Dict = None):
         '''
@@ -75,11 +81,28 @@ class TokenClsMetric(TextClsMetric):
         self.correct_num += (
             ((preds == labels) * attention_mask).sum(-1) == attention_mask.sum(-1)
         ).sum().item()
-        self.accuracy = self.correct_num / self.samples_num
-        self.token_level_accuracy = self.correct_tokens_num / self.total_tokens_num
+        self.accuracy = self.correct_tokens_num / self.total_tokens_num
+        self.line_level_accuracy = self.correct_num / self.samples_num
+        if data is not None:
+            for i in range(data["labels"].shape[0]):
+                sample = {
+                    "text": data["text"][i],
+                    "token:label->pred": []
+                }
+                for j in range(data["labels"].shape[1]):
+                    if attention_mask[i][j] == 0:
+                        continue
+                    sample["token:label->pred"].append(
+                        f"{self.tokenizer.decode(data['input_ids'][i][j].item())}: {self.label_names[data['labels'][i][j].item()]} -> {self.label_names[preds[i][j].item()]}"
+                    )
+                self.all_samples.append(sample)
+                if ((preds[i] == labels[i]) * attention_mask[i]).sum(-1) == attention_mask[i].sum(-1):
+                    self.positive_samples.append(sample)
+                else:
+                    self.negative_samples.append(sample)
 
     def metric_string(self):
-        return f"Accuracy={self.accuracy:.4f}, Token-level Accuracy={self.token_level_accuracy:.4f}."
+        return f"Accuracy={self.accuracy:.4f}, Line-level_Accuracy={self.line_level_accuracy:.4f}."
 
 
 def evaluate_ola_adapter(
