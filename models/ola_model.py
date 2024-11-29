@@ -13,7 +13,7 @@ from models.adapters import AxialTransformerAdapter
 
 
 def is_causal_lm(model_type: str) -> bool:
-    causal_models = {"gpt2", "opt", "llama"}
+    causal_models = {"gpt2", "opt", "llama", "qwen2"}
     non_causal_models = {"bert", "roberta", "albert"}
     if model_type.lower() in causal_models:
         return True

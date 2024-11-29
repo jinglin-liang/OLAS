@@ -1,4 +1,4 @@
-GPU_LIST=('2' '3' '4' '5')
+GPU_LIST=('1' '2' '3')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -8,6 +8,12 @@ do
     PID_LIST+=('nuLL')
 done
 echo GPU=${GPU_LIST[*]}
+
+
+LOG_FOLDER_PATH="outputs/logs"
+if [ ! -d "$LOG_FOLDER_PATH" ]; then
+    mkdir -p "$LOG_FOLDER_PATH"
+fi
 
 
 pid_exist(){
@@ -40,9 +46,9 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_gpt2_conll2000.json';
+for CFG in 'configs/train_qwen_1b_conll2000.json';
 do
-    for LR in '1e-5' '3e-5' '1e-4' '3e-4' '1e-3';
+    for LR in '1e-6' '3e-6' '1e-5' '3e-5' '1e-4' '3e-4' '1e-3';
     do
         while true
         do
