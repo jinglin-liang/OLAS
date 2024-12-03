@@ -1,0 +1,19 @@
+{
+    "train_models_name_list": [
+        "pretrained_models/Qwen2-1.5B-Instruct",
+        "pretrained_models/Qwen2-7B-Instruct",
+        "pretrained_models/gemma-2-2b-it",
+        "pretrained_models/gemma-2-9b-it"
+    ],
+    "dataset_name": "conll2000",
+    "cutoff_len": 64,
+    "do_train": false,
+    "do_eval": false,
+    "do_visualize": false,
+    "do_gen_save_ola": true,
+    "use_orders": [
+        1,
+        2,
+        3
+    ]
+}

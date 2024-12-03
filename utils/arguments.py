@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import Optional, List
 import os
 import time
 import json
@@ -22,9 +22,9 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-    model_name_or_path: str = field(
+    train_models_name_list: List[str] = field(
         metadata={
-            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+            "help": "The list of models to train."
         }
     )
     adapter_architecture: Optional[str] = field(
@@ -71,19 +71,16 @@ class ModelArguments:
         default=None,
         metadata={"help": "The path to the adapter checkpoint to evaluate."},
     )
-    visual_models_name_list: List[str] = field(
-        default_factory=lambda: [],
-        metadata={"help": "The list of models to visualize."},
-    )
 
     def __post_init__(self):
         if len(self.eval_models_name_list) == 0:
-            self.eval_models_name_list.append(self.model_name_or_path)
+            self.eval_models_name_list += self.train_models_name_list
 
 
 @dataclass
 class DataArguments:
     dataset_name: str = field(
+        default="conll2000",
         metadata={"help": "The name of the dataset to use."},
     )
     num_classes: int = field(
@@ -109,6 +106,10 @@ class DataArguments:
     visual_label_size: int = field(
         default=3,
         metadata={"help": "The size of the label in the visualization."},
+    )
+    use_generated_oladata: bool = field(
+        default=False,
+        metadata={"help": "Whether to use the generated OLA data."},
     )
 
     def __post_init__(self):
@@ -144,6 +145,10 @@ class OLALMTrainingArguments(TrainingArguments):
     do_visualize: bool = field(
         default=False,
         metadata={"help": "Whether to visualize the attention maps."},
+    )
+    do_gen_save_ola: bool = field(
+        default=False,
+        metadata={"help": "Whether to generate and save the OLA data."},
     )
 
     def __post_init__(self):

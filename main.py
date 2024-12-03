@@ -22,7 +22,11 @@ from utils import (
     OLALMTrainingArguments as TrainingArguments,
     OLALMTrainer,
 )
-from data_utils import DataManager
+from data_utils import (
+    generate_save_ola_data,
+    get_oladata_dir_path,
+    DataManager,
+)
 from models.ola_model import OLAModel
 
 
@@ -72,8 +76,9 @@ def main():
     data_manager = DataManager(
         dataset_name=data_args.dataset_name,
         cutoff_len=data_args.cutoff_len,
-        train_model_name_or_paths=[model_args.model_name_or_path],
-        test_model_name_or_paths=model_args.eval_models_name_list
+        train_model_name_or_paths=model_args.train_models_name_list,
+        test_model_name_or_paths=model_args.eval_models_name_list,
+        use_generated_oladata=data_args.use_generated_oladata
     )
 
     # do train
@@ -84,7 +89,7 @@ def main():
 
         # create OLAModel
         model = OLAModel(
-            base_model_name_or_path=model_args.model_name_or_path,
+            base_model_name_list=model_args.train_models_name_list,
             adapter_architecture=model_args.adapter_architecture,
             num_classes=data_args.num_classes,
             use_orders=model_args.use_orders,
@@ -96,7 +101,7 @@ def main():
         model = model.train().cuda()
         # load train dataset
         train_dataset, data_collator = data_manager.get_dataset_collator(
-            model_args.model_name_or_path, "train"
+            model_args.train_models_name_list, "train"
         )
         trainer = OLALMTrainer(
             model=model,
@@ -126,7 +131,7 @@ def main():
             print(f"Evaluating model {eval_model_name}")
             # load eval dataset
             eval_dataset, data_collator = data_manager.get_dataset_collator(
-                eval_model_name, "test"
+                [eval_model_name], "test"
             )
             eval_dataloader = DataLoader(
                 eval_dataset,
@@ -139,14 +144,14 @@ def main():
                 eval_metric = TextClsMetric()
             elif data_args.dataset_name.lower() == "conll2000":
                 eval_metric = TokenClsMetric(
-                    label_names=eval_dataset.features["pos_tags"].feature.names,
+                    label_names=eval_dataset.datasets[0].features["pos_tags"].feature.names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             else:
                 raise NotImplemented
             # create OLAModel
             model = OLAModel(
-                base_model_name_or_path=eval_model_name,
+                base_model_name_list=[eval_model_name,],
                 adapter_architecture=model_args.adapter_architecture,
                 num_classes=data_args.num_classes,
                 use_orders=model_args.use_orders,
@@ -175,7 +180,7 @@ def main():
             text_list = f.readlines()
         text_list = [text.rstrip('\n') for text in text_list]
         visualize_attn_map(
-            model_args.visual_models_name_list,
+            model_args.train_models_name_list,
             model_args.use_orders,
             text_list,
             training_args.output_dir,
@@ -184,6 +189,32 @@ def main():
             data_args.visual_annot_size,
             data_args.visual_label_size,
         )
+
+    # do ola data generation
+    if training_args.do_gen_save_ola:
+        for model_name_or_path in model_args.eval_models_name_list:
+            model = OLAModel(
+                base_model_name_list=[model_name_or_path,],
+                adapter_architecture="tokencls_axialtranformer",
+                num_classes=data_args.num_classes,
+                use_orders=model_args.use_orders,
+                remove_outliers=True,
+                outliers_sigma_multiplier=3,
+            )
+            for split in ["train", "test"]:
+                gen_dataset, gen_data_collator = data_manager.get_dataset_collator(
+                    [model_name_or_path], split
+                )
+                gen_data_collator.data_collator.pad_to_multiple_of = None
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split)
+                save_arguments([model_args, data_args, training_args], 
+                                os.path.join(save_dir, "args.json"))
+                generate_save_ola_data(
+                    model,
+                    gen_dataset,
+                    gen_data_collator,
+                    save_dir
+                )
 
 
 if __name__ == "__main__":

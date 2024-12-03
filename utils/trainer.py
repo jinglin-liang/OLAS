@@ -53,8 +53,9 @@ class OLALMTrainer(Trainer):
                 output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
             )
 
-        if self.processing_class is not None:
-            self.processing_class.save_pretrained(output_dir)
+        if hasattr(self, "processing_class"):
+            if self.processing_class is not None:
+                self.processing_class.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))

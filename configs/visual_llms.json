@@ -1,0 +1,20 @@
+{
+    "visual_text_file": "datasets/visualize/all_text.txt",
+    "train_models_name_list": [
+        "pretrained_models/Qwen2-1.5B-Instruct",
+        "pretrained_models/Qwen2-7B-Instruct",
+        "pretrained_models/roberta-base",
+        "pretrained_models/roberta-large"
+    ],
+    "do_train": false,
+    "do_eval": false,
+    "do_visualize": true,
+    "use_orders": [
+        1,
+        2,
+        3
+    ],
+    "cutoff_len": 64,
+    "visual_annot_size": 1,
+    "visual_label_size": 3
+}

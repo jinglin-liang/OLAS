@@ -64,7 +64,7 @@ def visualize_attn_map(
     # calculate ola
     for tmp_model_name in visual_models_name_list:
         tmp_model = OLAModel(
-            base_model_name_or_path=tmp_model_name,
+            base_model_name_list=[tmp_model_name,],
             adapter_architecture="textcls_resnet18",
             num_classes=2,
             use_orders=use_orders,

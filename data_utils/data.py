@@ -95,7 +95,7 @@ def load_raw_data(data_name: str):
         data = load_dataset(DATASET_NAME_TO_PATH[data_name])
         train_data = data["train"]
         test_data = data["test"]
-        unsupervised_data = data["unsupervised"]
+        # unsupervised_data = data["unsupervised"]
         return (train_data, test_data), imdb_standardize_function
     elif data_name.lower() == "conll2000":
         data = load_dataset(DATASET_NAME_TO_PATH[data_name], trust_remote_code=True)

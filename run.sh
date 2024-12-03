@@ -69,6 +69,7 @@ do
                     done
                 done
                 echo CUDA_DEVICES_$(IFS=,; echo "${FREE_GPUS[*]}")_CFG_${CFG:8:20}_PID:${training_pid}_LOG:$LOG_FILE
+                sleep 2s
                 break
             fi
         done

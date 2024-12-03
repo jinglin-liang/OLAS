@@ -1,6 +1,8 @@
 import functools
 from typing import List, Dict, Any
 
+import torch
+from torch.utils.data import ConcatDataset
 import datasets
 from transformers import AutoTokenizer
 from transformers.data.data_collator import (
@@ -8,7 +10,13 @@ from transformers.data.data_collator import (
     DataCollatorForTokenClassification
 )
 
-from data_utils.data import load_raw_data
+from data_utils.data import (
+    load_raw_data
+)
+from data_utils.ola_dataset import (
+    get_oladata_dir_path,
+    OLADataset
+)
 
 
 class PartPaddingDataCollator:
@@ -21,10 +29,26 @@ class PartPaddingDataCollator:
         if keys_to_ignore is None:
             self.keys_to_ignore = [
                 "text", "token_pos_tags", "token_chunk_tags", 
-                "tokens", "pos_tags", "chunk_tags", "id"
+                "tokens", "pos_tags", "chunk_tags", "id", "ola"
             ]
         else:
             self.keys_to_ignore = keys_to_ignore
+
+    def _padding_ola_tensor(self, ola_tensors: List[Dict[str, Any]], target_len: int):
+        all_orders = list(ola_tensors[0].keys())
+        ret_ola = {}
+        for tmp_order in all_orders:
+            ret_ola[tmp_order] = []
+            for ola_tensor in ola_tensors:
+                tmp_ola = torch.zeros(size=(1, 1, target_len, target_len))
+                tmp_size = ola_tensor[tmp_order].shape[-1]
+                if self.data_collator.tokenizer.padding_side == "left":
+                    tmp_ola[:, :, -tmp_size:, -tmp_size:] = ola_tensor[tmp_order]
+                else:
+                    tmp_ola[:, :, :tmp_size, :tmp_size] = ola_tensor[tmp_order]
+                ret_ola[tmp_order].append(tmp_ola)
+            ret_ola[tmp_order] = torch.cat(ret_ola[tmp_order], dim=0)
+        return ret_ola
 
     def __call__(self, features: List[Dict[str, Any]]) -> Dict[str, Any]:
         features_need_padding = [
@@ -33,9 +57,15 @@ class PartPaddingDataCollator:
         ]
         batch = self.data_collator(features_need_padding)
         for key in self.keys_to_ignore:
-            if key in features[0].keys():
+            if key in features[0].keys() and key != "ola":
                 batch[key] = [feature[key] for feature in features]
-        return batch
+        # padding ola tensors
+        if "ola" in features[0].keys():
+            batch["ola"] = self._padding_ola_tensor(
+                [feature["ola"] for feature in features], 
+                batch["input_ids"].shape[1]
+            )
+        return dict(batch)
 
 
 class DataManager:
@@ -45,20 +75,22 @@ class DataManager:
         cutoff_len: int,
         train_model_name_or_paths: List[str],
         test_model_name_or_paths: List[str],
+        use_generated_oladata: bool = False
     ) -> None:
         self.dataset_name = dataset_name
         self.cutoff_len = cutoff_len
         self.train_model_name_or_paths = train_model_name_or_paths
         self.test_model_name_or_paths = test_model_name_or_paths
+        self.use_generated_oladata = use_generated_oladata
         # init tokenizer
         self._init_tokenizers(
             train_model_name_or_paths + test_model_name_or_paths
         )
         # load data
-        (train_data, test_data), standardize_function = \
+        (raw_train_data, raw_test_data), standardize_function = \
             load_raw_data(dataset_name)
-        train_data: datasets.Dataset
-        test_data: datasets.Dataset
+        raw_train_data: datasets.Dataset
+        raw_test_data: datasets.Dataset
         self.data = {
             "train": {},
             "test": {},
@@ -66,27 +98,39 @@ class DataManager:
         kwargs = {}
         kwargs["cutoff_len"] = self.cutoff_len
         if dataset_name == "conll2000":
-            kwargs["pos_tags_names"] = train_data.features["pos_tags"].feature.names
-            kwargs["chunk_tags_names"] = train_data.features["chunk_tags"].feature.names
+            kwargs["pos_tags_names"] = raw_train_data.features["pos_tags"].feature.names
+            kwargs["chunk_tags_names"] = raw_train_data.features["chunk_tags"].feature.names
         for tmp_train_model in train_model_name_or_paths:
-            kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
-            preprocess_func = functools.partial(
-                standardize_function,
-                **kwargs
-            )
-            # self.data["train"][tmp_train_model] = \
-            #     train_data.map(preprocess_func, load_from_cache_file=False)
-            self.data["train"][tmp_train_model] = train_data.map(preprocess_func)
+            if self.use_generated_oladata:
+                data_dir_path = get_oladata_dir_path(
+                    dataset_name, tmp_train_model, "train"
+                )
+                self.data["train"][tmp_train_model] = OLADataset(data_dir_path)
+            else:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                preprocess_func = functools.partial(
+                    standardize_function,
+                    **kwargs
+                )
+                # self.data["train"][tmp_train_model] = \
+                #     raw_train_data.map(preprocess_func, load_from_cache_file=False)
+                self.data["train"][tmp_train_model] = raw_train_data.map(preprocess_func)
         
         for tmp_test_model in test_model_name_or_paths:
-            kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
-            preprocess_func = functools.partial(
-                standardize_function,
-                **kwargs
-            )
-            # self.data["test"][tmp_test_model] = \
-            #     test_data.map(preprocess_func, load_from_cache_file=False)
-            self.data["test"][tmp_test_model] = test_data.map(preprocess_func)
+            if self.use_generated_oladata:
+                data_dir_path = get_oladata_dir_path(
+                    dataset_name, tmp_test_model, "test"
+                )
+                self.data["test"][tmp_test_model] = OLADataset(data_dir_path)
+            else:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                preprocess_func = functools.partial(
+                    standardize_function,
+                    **kwargs
+                )
+                # self.data["test"][tmp_test_model] = \
+                #     raw_test_data.map(preprocess_func, load_from_cache_file=False)
+                self.data["test"][tmp_test_model] = raw_test_data.map(preprocess_func)
 
     def _init_tokenizers(self, all_model_name_or_paths: List[str]):
         self.tokenizer_dict = {}
@@ -97,23 +141,28 @@ class DataManager:
             tokenizer.padding_side = "left"  # Allow batched inference
             self.tokenizer_dict[tmp_model] = tokenizer
 
-    def get_dataset_collator(self, model_name_or_path: str, split: str):
+    def get_dataset_collator(self, model_name_list: List[str], split: str):
         assert split in ["train", "test"]
-        assert model_name_or_path in self.data[split].keys()
+        for model_name_or_path in model_name_list:
+            assert model_name_or_path in self.data[split].keys()
+
+        ret_dataset = ConcatDataset(
+            [self.data[split][model_name_or_path] for model_name_or_path in model_name_list]
+        )
 
         if self.dataset_name == "conll2000":
             base_data_collator = DataCollatorForTokenClassification(
-                tokenizer=self.tokenizer_dict[model_name_or_path],
+                tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=8
             )
         elif self.dataset_name == "imdb":
             base_data_collator = DataCollatorWithPadding(
-                tokenizer=self.tokenizer_dict[model_name_or_path],
+                tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=8
             )
 
-        return self.data[split][model_name_or_path], PartPaddingDataCollator(base_data_collator)
+        return ret_dataset, PartPaddingDataCollator(base_data_collator)

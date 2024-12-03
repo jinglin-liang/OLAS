@@ -8,12 +8,12 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
-from models.ola_utils import get_order_level_attention
+from models.ola_utils import get_order_level_attention, cal_maskes_from_ola
 from models.adapters import AxialTransformerAdapter
 
 
 def is_causal_lm(model_type: str) -> bool:
-    causal_models = {"gpt2", "opt", "llama", "qwen2"}
+    causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2"}
     non_causal_models = {"bert", "roberta", "albert"}
     if model_type.lower() in causal_models:
         return True
@@ -63,7 +63,7 @@ class OLALMOutput(ModelOutput):
 class OLAModel(nn.Module):
     def __init__(
         self,
-        base_model_name_or_path: str,
+        base_model_name_list: List[str],
         adapter_architecture: str,
         num_classes: int,
         use_orders: List[int] = [1, 2, 3],
@@ -73,33 +73,43 @@ class OLAModel(nn.Module):
         **kwargs,
     ):
         super(OLAModel, self).__init__()
-        self._init_base_model(base_model_name_or_path, local_files_only)
+        self._init_base_model(base_model_name_list, local_files_only)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
                                use_orders, remove_outliers, outliers_sigma_multiplier)
         self._init_learnable_params()
 
-    def _init_base_model(self, base_model_name_or_path, local_files_only):
-        self.base_model_name_or_path = base_model_name_or_path
-        # load config
-        config = AutoConfig.from_pretrained(
-            base_model_name_or_path, 
-            local_files_only=local_files_only
-        )
-        # load base model
-        model_class = getattr(__import__('transformers'), config.architectures[0])
-        self.base_model = model_class.from_pretrained(
-            base_model_name_or_path, config=config,
-            local_files_only=local_files_only, 
-            attn_implementation="eager"
-        )
-        # load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            base_model_name_or_path, local_files_only=True)
-        self.tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
-        self.tokenizer.padding_side = "left"  # Allow batched inference
-        # is causal language model
-        self.is_casual = is_causal_lm(self.base_model.config.model_type)
-
+    def _init_base_model(self, base_model_name_list, local_files_only):
+        self.base_model_name_list = base_model_name_list
+        self.all_tokenizer = {}
+        is_casual_list = []
+        for tmp_model_name in base_model_name_list:
+            # load config
+            config = AutoConfig.from_pretrained(
+                tmp_model_name, 
+                local_files_only=local_files_only
+            )
+            # is causal language model
+            is_casual_list.append(is_causal_lm(config.model_type))
+            # load tokenizer
+            tmp_tokenizer = AutoTokenizer.from_pretrained(
+                tmp_model_name, local_files_only=True)
+            tmp_tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
+            tmp_tokenizer.padding_side = "left"  # Allow batched inference
+            self.all_tokenizer[tmp_model_name] = tmp_tokenizer
+            if len(base_model_name_list) == 1:
+                # load base model
+                model_class = getattr(__import__('transformers'), config.architectures[0])
+                self.base_model = model_class.from_pretrained(
+                    tmp_model_name, config=config,
+                    local_files_only=local_files_only, 
+                    attn_implementation="eager"
+                )
+            else:
+                self.base_model = None
+        assert all(is_casual_list) or all([not i for i in is_casual_list]), "All models should be the same type."
+        self.is_casual = is_casual_list[0]
+        self.tokenizer = self.all_tokenizer[base_model_name_list[0]]
+            
     def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
                           remove_outliers, outliers_sigma_multiplier):
         self.adapter_architecture = adapter_architecture
@@ -109,7 +119,7 @@ class OLAModel(nn.Module):
         self.num_classes = num_classes
         ola_input_channal = len(use_orders) * (1 + int(remove_outliers))
         if adapter_architecture == "textcls_resnet18":
-            self.adaptor = resnet18(pretrained=False, num_classes=num_classes)
+            self.adaptor = resnet18(num_classes=num_classes)
             self.adaptor.conv1 = nn.Conv2d(
                 ola_input_channal, self.adaptor.conv1.out_channels, 
                 kernel_size=7, stride=2, padding=3, bias=False
@@ -130,8 +140,9 @@ class OLAModel(nn.Module):
         self.adapter_requires_grad_(True)
 
     def base_model_requires_grad_(self, requires_grad):
-        for _, param in self.base_model.named_parameters():
-            param.requires_grad = requires_grad
+        if self.base_model is not None:
+            for _, param in self.base_model.named_parameters():
+                param.requires_grad = requires_grad
 
     def adapter_requires_grad_(self, requires_grad):
         for _, param in self.adaptor.named_parameters():
@@ -143,38 +154,52 @@ class OLAModel(nn.Module):
     def load_adapter(self, path):
         ckpt = torch.load(path, map_location='cpu')
         self.adaptor.load_state_dict(ckpt)
+    
+    @property
+    def device(self):
+        return next(self.adaptor.parameters()).device
 
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        ola: Optional[Dict[int, torch.FloatTensor]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_ola: Optional[bool] = None,
         **kwargs,
     ) -> Union[OLALMOutput]:
         # move inputs to device
-        input_ids = input_ids.to(self.base_model.device)
-        attention_mask = attention_mask.to(self.base_model.device)
+        input_ids = input_ids.to(self.device)
+        attention_mask = attention_mask.to(self.device)
         if labels is not None:
-            labels = labels.to(self.base_model.device)
-        # base model forward
-        output = self.base_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            labels=None,
-            output_attentions=True,
-            output_hidden_states=False,
-            return_dict=True
-        )
-        # get order level attention
-        ola, ola_mask = get_order_level_attention(
-            output.attentions, 
-            attention_mask, 
-            is_casual=self.is_casual,
-            use_orders=self.use_orders,
+            labels = labels.to(self.device)
+        # calculate ola
+        if ola is None:
+            # base model forward
+            output = self.base_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                labels=None,
+                output_attentions=True,
+                output_hidden_states=False,
+                return_dict=True
+            )
+            # get order level attention
+            ola = get_order_level_attention(
+                output.attentions, 
+                attention_mask, 
+                use_orders=self.use_orders,
+            )
+        else:
+            ola = {k: v.to(self.device) 
+                   for k, v in ola.items() if k in self.use_orders}
+        # calculate maskes from ola
+        ola_mask = cal_maskes_from_ola(
+            ola, attention_mask, 
+            is_casual=self.is_casual, 
             sigma_multiplier=self.outliers_sigma_multiplier
         )
         # preprocess ola

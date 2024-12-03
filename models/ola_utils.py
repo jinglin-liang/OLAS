@@ -63,11 +63,7 @@ def get_outliers_mask(attn_map, interested_masked=None, sigma_multiplier=None):
     return outliers_mask.int()
 
 
-def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=None, sigma_multiplier=3.0):
-    if use_orders is None:
-        use_orders = [1, 2, 3]
-    order_to_attn_map = combine_attention_orders(attn_maps, attention_mask, use_orders)
-    # get unpadding mask, interested mask, outliers mask
+def cal_maskes_from_ola(order_to_attn_map, attention_mask, is_casual, sigma_multiplier=3.0):
     attention_mask = attention_mask.unsqueeze(-1)
     unpadding_mask = attention_mask.float() @ attention_mask.transpose(1, 2).float()
     unpadding_mask = unpadding_mask.unsqueeze(1)
@@ -83,4 +79,20 @@ def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=N
         "interested_mask": interested_mask,
         "outliers_mask": outliers_mask,
     }
-    return order_to_attn_map, maskes
+    return maskes
+
+
+# def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=None, sigma_multiplier=3.0):
+#     if use_orders is None:
+#         use_orders = [1, 2, 3]
+#     order_to_attn_map = combine_attention_orders(attn_maps, attention_mask, use_orders)
+#     # get unpadding mask, interested mask, outliers mask
+#     maskes = cal_maskes_from_ola(order_to_attn_map, attention_mask, is_casual, sigma_multiplier)
+#     return order_to_attn_map, maskes
+
+
+def get_order_level_attention(attn_maps, attention_mask, use_orders=None):
+    if use_orders is None:
+        use_orders = [1, 2, 3]
+    order_to_attn_map = combine_attention_orders(attn_maps, attention_mask, use_orders)
+    return order_to_attn_map
