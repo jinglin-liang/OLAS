@@ -3,7 +3,8 @@ from datasets import load_dataset
 
 DATASET_NAME_TO_PATH = {
     "imdb": "datasets/imdb",
-    "conll2000": "datasets/conll2000/conll2000.py",
+    "conll2000_pos": "datasets/conll2000/conll2000.py",
+    "conll2000_chunk": "datasets/conll2000/conll2000.py",
 }
 
 
@@ -44,10 +45,14 @@ def conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_n
         attention_mask.append(1)
         ret_pos_tags.append(len(pos_tags_names))
         ret_chunk_tags.append(chunk_tags_names.index("O"))
-    for tmp_word, tmp_pos, tmp_chunk in zip(tokens, pos_tags, chunk_tags):
+    for tmp_idx, (tmp_word, tmp_pos, tmp_chunk) in enumerate(zip(tokens, pos_tags, chunk_tags)):
         # add " " to tmp_word to avoid LM such as GPT2 to ignore the space
+        if tmp_idx > 0:
+            tmp_word = " " + tmp_word
+        if hasattr(tokenizer, "vocab_file") and "Yi-1.5" in tokenizer.vocab_file:
+            tmp_word = tmp_word.lstrip(" ")
         tokenized_word = tokenizer(
-            " " + tmp_word,
+            tmp_word,
             truncation=True,
             max_length=cutoff_len,
             padding=False,
@@ -78,11 +83,22 @@ def conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_n
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "labels": ret_pos_tags,
         "token_pos_tags": ret_pos_tags,
         "token_chunk_tags": ret_chunk_tags,
         "text": " ".join(tokens)
     }
+
+
+def conll2000_pos_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names):
+    ret = conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names)
+    ret["labels"] = ret["token_pos_tags"]
+    return ret
+
+
+def conll2000_chunk_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names):
+    ret = conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names)
+    ret["labels"] = ret["token_chunk_tags"]
+    return ret
 
 
 def load_raw_data(data_name: str):
@@ -97,10 +113,15 @@ def load_raw_data(data_name: str):
         test_data = data["test"]
         # unsupervised_data = data["unsupervised"]
         return (train_data, test_data), imdb_standardize_function
-    elif data_name.lower() == "conll2000":
+    elif data_name.lower() == "conll2000_pos":  # conll2000 pos tagging
         data = load_dataset(DATASET_NAME_TO_PATH[data_name], trust_remote_code=True)
         train_data = data["train"]
         test_data = data["test"]
-        return (train_data, test_data), conll2000_standardize_function
+        return (train_data, test_data), conll2000_pos_standardize_function
+    elif data_name.lower() == "conll2000_chunk":  # conll2000 text chunking
+        data = load_dataset(DATASET_NAME_TO_PATH[data_name], trust_remote_code=True)
+        train_data = data["train"]
+        test_data = data["test"]
+        return (train_data, test_data), conll2000_chunk_standardize_function
     else:
         raise NotImplementedError(f"Dataset {data_name} is not supported.")

@@ -1,6 +1,7 @@
 {
+    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/Yi-1.5-9B-Chat"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2000_pos",

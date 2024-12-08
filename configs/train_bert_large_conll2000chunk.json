@@ -1,9 +1,9 @@
 {
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/bert-large-cased"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
-    "dataset_name": "conll2000_pos",
+    "dataset_name": "conll2000_chunk",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,

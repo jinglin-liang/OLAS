@@ -80,7 +80,7 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     dataset_name: str = field(
-        default="conll2000",
+        default="conll2000_pos",
         metadata={"help": "The name of the dataset to use."},
     )
     num_classes: int = field(
@@ -116,10 +116,12 @@ class DataArguments:
         if self.num_classes is None:
             if self.dataset_name == "imdb":
                 self.num_classes = 2
-            elif self.dataset_name == "conll2000":
+            elif self.dataset_name == "conll2000_pos":
                 # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
                 self.num_classes = 44 + 1
-                # self.num_classes = 23 + 1
+            elif self.dataset_name == "conll2000_chunk":
+                # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
+                self.num_classes = 23
             else:
                 raise ValueError(f"Dataset {self.dataset_name} is not supported.")
 

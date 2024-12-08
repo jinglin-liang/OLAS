@@ -1,6 +1,8 @@
 {
+    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/Qwen2-1.5B-Instruct",
+        "pretrained_models/Qwen2-7B-Instruct"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2000_pos",

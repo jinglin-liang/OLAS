@@ -62,10 +62,6 @@ class TokenClsMetric(TextClsMetric):
     label_names: Optional[List[str]] = None
     tokenizer: Optional[AutoTokenizer] = None
 
-    def __post_init__(self):
-        if self.label_names is not None:
-            self.label_names.append("[None]")
-
     def judge(self, predictions: Tensor, labels: Tensor, data: Dict = None):
         '''
         predictions: (n, l, c)
@@ -119,6 +115,8 @@ def evaluate_ola_adapter(
     interested_keys = inspect.signature(model.forward).parameters.keys()
     bar = tqdm(eval_dataloader, desc="Evaluating")
     for data in bar:
+        if data['input_ids'].shape[-1] == 0:
+            continue
         with torch.no_grad():
             output = model(
                 **{k: v for k, v in data.items() if k in interested_keys}

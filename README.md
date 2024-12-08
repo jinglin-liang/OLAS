@@ -91,3 +91,10 @@ cutoff_len
 per_device_eval_batch_size
 use_orders
 ```
+
+## Todo 
+
+- [ ] 对text chunking任务实现P，R，F1评价指标
+- [ ] 实现OLAS相似性文本分类的数据集生成代码
+- [ ] 数据增强（模拟不同模型的olas扰动，增强跨模型泛化性）
+- [ ] 跨语言迁移

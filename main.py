@@ -4,6 +4,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import sys
 import json
 
+import torch
 from torch.utils.data import DataLoader
 from transformers import (
     set_seed,
@@ -95,7 +96,8 @@ def main():
             use_orders=model_args.use_orders,
             remove_outliers=model_args.remove_outliers,
             outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
-            local_files_only=model_args.local_files_only
+            local_files_only=model_args.local_files_only,
+            abandom_base_lm=data_args.use_generated_oladata
         )
         model.print_trainable_parameters()
         model = model.train().cuda()
@@ -116,6 +118,9 @@ def main():
         )
         os.makedirs(os.path.dirname(last_ckpt_path), exist_ok=True)
         model.save_adapter(last_ckpt_path)
+        # Explicitly delete the model and clear cache
+        del model
+        torch.cuda.empty_cache()
 
     # do eval
     if training_args.do_eval:
@@ -126,6 +131,13 @@ def main():
             )
         else:
             eval_adapter_checkpoint = model_args.eval_adapter_checkpoint
+        # load arguments
+        eval_args = os.path.join(
+            os.path.dirname(eval_adapter_checkpoint), 
+            "..", "args.json"
+        )
+        with open(eval_args, "r") as f:
+            eval_args = json.load(f)
         # evaluate each model
         for eval_model_name in model_args.eval_models_name_list:
             print(f"Evaluating model {eval_model_name}")
@@ -142,9 +154,16 @@ def main():
             # load eval metric
             if data_args.dataset_name.lower() == "imdb":
                 eval_metric = TextClsMetric()
-            elif data_args.dataset_name.lower() == "conll2000":
+            elif data_args.dataset_name.lower() == "conll2000_pos":
+                label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
+                label_names.append("[None]")
                 eval_metric = TokenClsMetric(
-                    label_names=eval_dataset.datasets[0].features["pos_tags"].feature.names,
+                    label_names=label_names,
+                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
+                )
+            elif data_args.dataset_name.lower() == "conll2000_chunk":
+                eval_metric = TokenClsMetric(
+                    label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             else:
@@ -152,11 +171,11 @@ def main():
             # create OLAModel
             model = OLAModel(
                 base_model_name_list=[eval_model_name,],
-                adapter_architecture=model_args.adapter_architecture,
-                num_classes=data_args.num_classes,
-                use_orders=model_args.use_orders,
-                remove_outliers=model_args.remove_outliers,
-                outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
+                adapter_architecture=eval_args["adapter_architecture"],
+                num_classes=eval_args["num_classes"],
+                use_orders=eval_args["use_orders"],
+                remove_outliers=eval_args["remove_outliers"],
+                outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
@@ -170,6 +189,9 @@ def main():
                 eval_adapter_ckpt=eval_adapter_checkpoint,
                 output_dir=output_dir,
             )
+            # Explicitly delete the model and clear cache
+            del model
+            torch.cuda.empty_cache()
 
     # do visualize
     if training_args.do_visualize:
@@ -215,6 +237,9 @@ def main():
                     gen_data_collator,
                     save_dir
                 )
+            # Explicitly delete the model and clear cache
+            del model
+            torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":

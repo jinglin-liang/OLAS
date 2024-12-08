@@ -97,7 +97,7 @@ class DataManager:
         }
         kwargs = {}
         kwargs["cutoff_len"] = self.cutoff_len
-        if dataset_name == "conll2000":
+        if dataset_name in ["conll2000_pos", "conll2000_chunk"]:
             kwargs["pos_tags_names"] = raw_train_data.features["pos_tags"].feature.names
             kwargs["chunk_tags_names"] = raw_train_data.features["chunk_tags"].feature.names
         for tmp_train_model in train_model_name_or_paths:
@@ -150,7 +150,7 @@ class DataManager:
             [self.data[split][model_name_or_path] for model_name_or_path in model_name_list]
         )
 
-        if self.dataset_name == "conll2000":
+        if self.dataset_name in ["conll2000_pos", "conll2000_chunk"]:
             base_data_collator = DataCollatorForTokenClassification(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",

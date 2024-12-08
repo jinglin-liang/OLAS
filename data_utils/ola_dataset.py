@@ -18,6 +18,10 @@ def get_oladata_dir_path(dataset_name, model_name_or_path, split):
         data_root_dir = DATASET_NAME_TO_PATH[dataset_name] + "_ola"
     else:
         raise ValueError("Invalid dataset path")
+    if dataset_name == "conll2000_pos":
+        data_root_dir = data_root_dir + "_pos"
+    elif dataset_name == "conll2000_chunk":
+        data_root_dir = data_root_dir + "_chunk"
     save_dir = os.path.join(
         data_root_dir, 
         os.path.basename(model_name_or_path),
@@ -56,6 +60,8 @@ def generate_save_ola_data(
     cnt = 0
     cache = {}
     for data in bar:
+        if data["input_ids"].shape[-1] == 0:
+            continue
         with torch.no_grad():
             input_dict = {k: v for k, v in data.items() if k in interested_keys}
             input_dict["output_ola"] = True

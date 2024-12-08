@@ -13,7 +13,7 @@ from models.adapters import AxialTransformerAdapter
 
 
 def is_causal_lm(model_type: str) -> bool:
-    causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2"}
+    causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2", "bloom"}
     non_causal_models = {"bert", "roberta", "albert"}
     if model_type.lower() in causal_models:
         return True
@@ -70,15 +70,16 @@ class OLAModel(nn.Module):
         remove_outliers: bool = False,
         local_files_only: bool = True,
         outliers_sigma_multiplier: float = 3.0,
+        abandom_base_lm: bool = False,
         **kwargs,
     ):
         super(OLAModel, self).__init__()
-        self._init_base_model(base_model_name_list, local_files_only)
+        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
                                use_orders, remove_outliers, outliers_sigma_multiplier)
         self._init_learnable_params()
 
-    def _init_base_model(self, base_model_name_list, local_files_only):
+    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm):
         self.base_model_name_list = base_model_name_list
         self.all_tokenizer = {}
         is_casual_list = []
@@ -96,7 +97,7 @@ class OLAModel(nn.Module):
             tmp_tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
             tmp_tokenizer.padding_side = "left"  # Allow batched inference
             self.all_tokenizer[tmp_model_name] = tmp_tokenizer
-            if len(base_model_name_list) == 1:
+            if len(base_model_name_list) == 1 and not abandom_base_lm:
                 # load base model
                 model_class = getattr(__import__('transformers'), config.architectures[0])
                 self.base_model = model_class.from_pretrained(

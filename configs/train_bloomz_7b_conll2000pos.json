@@ -1,6 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/bloomz-7b1"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2000_pos",
