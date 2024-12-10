@@ -155,8 +155,11 @@ def main():
             if data_args.dataset_name.lower() == "imdb":
                 eval_metric = TextClsMetric()
             elif data_args.dataset_name.lower() == "conll2000_pos":
-                label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
-                label_names.append("[None]")
+                if hasattr(eval_dataset.datasets[0], "features"):
+                    label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
+                    label_names.append("[None]")
+                else:
+                    label_names = [str(i) for i in range(eval_args["num_classes"])]
                 eval_metric = TokenClsMetric(
                     label_names=label_names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],

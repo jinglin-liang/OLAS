@@ -1,10 +1,9 @@
 {
-    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/Yi-1.5-6B-Chat"
+        "pretrained_models/gemma-2-2b-it"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
-    "dataset_name": "conll2000_pos",
+    "dataset_name": "conll2000_chunk",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
@@ -14,5 +13,8 @@
     "per_device_train_batch_size": 2,
     "per_device_eval_batch_size": 8,
     "save_steps": 0.2,
-    "use_orders": [1, 2]
+    "use_orders": [
+        1,
+        2
+    ]
 }

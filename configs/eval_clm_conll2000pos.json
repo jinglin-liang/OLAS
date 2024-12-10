@@ -17,5 +17,5 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/-train_bloomz_3b_lr_3e-5/checkpoint-last/ola_adapter_weight.bin"
+    "eval_adapter_checkpoint": "outputs/-train_yi_6b_lr_1e-5/checkpoint-last/ola_adapter_weight.bin"
 }

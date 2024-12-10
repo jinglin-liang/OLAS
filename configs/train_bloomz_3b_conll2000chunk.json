@@ -1,10 +1,9 @@
 {
-    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/Yi-1.5-6B-Chat"
+        "pretrained_models/bloomz-3b"
     ],
     "adapter_architecture": "tokencls_axialtranformer",
-    "dataset_name": "conll2000_pos",
+    "dataset_name": "conll2000_chunk",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
