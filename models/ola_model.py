@@ -169,6 +169,7 @@ class OLAModel(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_ola: Optional[bool] = None,
+        task: Optional[str] = "pos",
         **kwargs,
     ) -> Union[OLALMOutput]:
         # move inputs to device
@@ -225,8 +226,14 @@ class OLAModel(nn.Module):
             prediction_scores = prediction_scores[:, :, idx_tensor, idx_tensor]
             prediction_scores = prediction_scores.transpose(1, 2).contiguous()
             if labels is not None:
-                loss_fct = nn.CrossEntropyLoss()
-                loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
+                if task != "entity":
+                    loss_fct = nn.CrossEntropyLoss()
+                    loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
+                else:
+                    loss_fct = nn.CrossEntropyLoss(reduction="none")
+                    loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
+                    loss_weight = torch.ones_like(labels.view(-1)) - 0.5 * (labels.view(-1) == 0)
+                    loss = torch.mean(loss * loss_weight)
             else:
                 loss = None
         else:

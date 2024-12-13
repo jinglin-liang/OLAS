@@ -1,0 +1,15 @@
+{
+    "train_models_name_list": [
+        "pretrained_models/roberta-base"
+    ],
+    "eval_models_name_list": [
+        "pretrained_models/roberta-base"
+    ],
+    "dataset_name": "conll2012en_entity",
+    "task": "entity",
+    "cutoff_len": 64,
+    "do_train": false,
+    "do_eval": true,
+    "per_device_eval_batch_size": 8,
+    "eval_adapter_checkpoint": "outputs/20241212_074839/checkpoint-148995/ola_adapter_weight.bin"
+}

@@ -5,6 +5,10 @@ DATASET_NAME_TO_PATH = {
     "imdb": "datasets/imdb",
     "conll2000_pos": "datasets/conll2000/conll2000.py",
     "conll2000_chunk": "datasets/conll2000/conll2000.py",
+    "conll2012cn_pos": "datasets/conll2012/conll2012_ontonotesv5.py",
+    "conll2012en_pos": "datasets/conll2012/conll2012_ontonotesv5.py",
+    "conll2012cn_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
+    "conll2012en_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
 }
 
 
@@ -123,5 +127,15 @@ def load_raw_data(data_name: str):
         train_data = data["train"]
         test_data = data["test"]
         return (train_data, test_data), conll2000_chunk_standardize_function
+    elif data_name.lower() in ["conll2012cn_pos", "conll2012cn_entity"]:  # conll2012 pos tagging
+        data = load_dataset(DATASET_NAME_TO_PATH[data_name], 'chinese_v4', trust_remote_code=True)
+        train_data = data["train"]
+        test_data = data["test"]
+        return (train_data, test_data), None
+    elif data_name.lower() in ["conll2012en_pos", "conll2012en_entity"]:  # conll2012 pos tagging
+        data = load_dataset(DATASET_NAME_TO_PATH[data_name], 'english_v4', trust_remote_code=True)
+        train_data = data["train"]
+        test_data = data["test"]
+        return (train_data, test_data), None
     else:
         raise NotImplementedError(f"Dataset {data_name} is not supported.")

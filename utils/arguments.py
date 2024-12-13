@@ -120,8 +120,17 @@ class DataArguments:
                 # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
                 self.num_classes = 44 + 1
             elif self.dataset_name == "conll2000_chunk":
-                # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
                 self.num_classes = 23
+            elif self.dataset_name == "conll2012cn_pos":
+                # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
+                self.num_classes = 36 + 1
+            elif self.dataset_name == "conll2012en_pos":
+                # 1 for padding or special tokens such as [CLS], [SEP], [MASK], etc.
+                self.num_classes = 49 + 1
+            elif self.dataset_name == "conll2012cn_entity":
+                self.num_classes = 37
+            elif self.dataset_name == "conll2012en_entity":
+                self.num_classes = 37
             else:
                 raise ValueError(f"Dataset {self.dataset_name} is not supported.")
 
@@ -151,6 +160,10 @@ class OLALMTrainingArguments(TrainingArguments):
     do_gen_save_ola: bool = field(
         default=False,
         metadata={"help": "Whether to generate and save the OLA data."},
+    )
+    task: str = field(
+        default="pos",
+        metadata={"help": "Task name."},
     )
 
     def __post_init__(self):
