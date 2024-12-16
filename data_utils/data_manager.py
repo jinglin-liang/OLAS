@@ -32,7 +32,7 @@ class PartPaddingDataCollator:
         if keys_to_ignore is None:
             self.keys_to_ignore = [
                 "text", "token_pos_tags", "token_chunk_tags", "token_named_entities_tags",
-                "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola"
+                "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola", "task"
             ]
         else:
             self.keys_to_ignore = keys_to_ignore

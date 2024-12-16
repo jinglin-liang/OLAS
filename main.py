@@ -83,6 +83,15 @@ def main():
         use_generated_oladata=data_args.use_generated_oladata
     )
 
+    if data_args.othertest_dataset_name != None:
+        _data_manager = DataManager(
+        dataset_name=data_args.othertest_dataset_name,
+        cutoff_len=data_args.cutoff_len,
+        train_model_name_or_paths=model_args.train_models_name_list,
+        test_model_name_or_paths=model_args.eval_models_name_list,
+        use_generated_oladata=data_args.use_generated_oladata
+    )
+
     # do train
     if training_args.do_train:
         # save arguments
@@ -125,6 +134,8 @@ def main():
 
     # do eval
     if training_args.do_eval:
+        if data_args.othertest_dataset_name != None:
+            data_manager = _data_manager
         # load eval adapter checkpoint
         if model_args.eval_adapter_checkpoint is None:
             eval_adapter_checkpoint = os.path.join(

@@ -83,6 +83,10 @@ class DataArguments:
         default="conll2000_pos",
         metadata={"help": "The name of the dataset to use."},
     )
+    othertest_dataset_name: str = field(
+        default=None,
+        metadata={"help": "The name of the other dataset to use(cross language)."},
+    )
     num_classes: int = field(
         default=None,
         metadata={"help": "The number of classes in the dataset"}
