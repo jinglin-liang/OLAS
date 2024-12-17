@@ -81,22 +81,21 @@ class ModelArguments:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
             self.ola_augments = [
+                # {
+                #     "class_name": "RandomHightlightColumns",
+                #     "params": {
+                #         "p": 0.3,
+                #         "min_columns": 1,
+                #         "max_columns": 3
+                #     }
+                # },
                 {
-                    "class_name": "RandomHightlightColumns",
+                    "class_name": "AddGuassianNoise",
                     "params": {
                         "p": 0.3,
-                        "min_columns": 1,
-                        "max_columns": 3
+                        "std_ratio": 0.2
                     }
-                },
-                # {
-                #     "class_name": "AddGuassianNoise",
-                #     "params": {
-                #         "p": 1,
-                #         "mean": 0.0,
-                #         "std": 0.1
-                #     }
-                # }
+                }
             ]
 
 

@@ -51,18 +51,27 @@ class RandomHightlightColumns(nn.Module):
 
 
 class AddGuassianNoise(nn.Module):
-    def __init__(self, p: float = 0.5, mean: float = 0.0, std: float = 0.1):
+    def __init__(self, p: float = 0.5, std_ratio: float = 0.1):
         super(AddGuassianNoise, self).__init__()
         self.p = p
-        self.mean = mean
-        self.std = std
+        self.std_ratio = std_ratio
 
     def forward(self, ola, ola_mask):
         if torch.rand(1) > self.p:
             return ola, ola_mask
         ret_ola = {}
         for tmp_o, tmp_ola in ola.items():
-            noise = self.mean + self.std * torch.randn_like(tmp_ola)
+            # interested_mask = ola_mask["interested_mask"]
+            interested_mask = ola_mask["interested_mask"] * (1 - ola_mask["outliers_mask"][tmp_o])
+            noise_std = self.cal_noise_std(tmp_ola, interested_mask)
+            noise = noise_std * torch.randn_like(tmp_ola)
             noise = noise * ola_mask["interested_mask"]
-            ret_ola[tmp_o] = tmp_ola + noise
-        return ola, ola_mask
+            ret_ola[tmp_o] = torch.relu(tmp_ola + noise) * ola_mask["interested_mask"]
+            ret_ola[tmp_o] = ret_ola[tmp_o] / (ret_ola[tmp_o].sum(-1, keepdim=True) + 1e-10)
+        return ret_ola, ola_mask
+    
+    def cal_noise_std(self, input_ola, interested_mask):
+        mean = (input_ola * interested_mask).sum(-1) / (interested_mask.sum(-1) + 1e-10)
+        d = ((input_ola - mean.unsqueeze(-1)).pow(2) * interested_mask).sum(-1) / (interested_mask.sum(-1) + 1e-10)
+        std = torch.sqrt(d)
+        return std.unsqueeze(-1) * self.std_ratio

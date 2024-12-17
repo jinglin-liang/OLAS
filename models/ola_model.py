@@ -224,12 +224,12 @@ class OLAModel(nn.Module):
         # augments ola
         if self.training and self.ola_augments is not None:
             for tmp_aug in self.ola_augments:
-                ola, ola_mask = tmp_aug(ola, ola_mask)
-            ola_mask = cal_maskes_from_ola(
-                ola, attention_mask, 
-                is_casual=self.is_casual, 
-                sigma_multiplier=self.outliers_sigma_multiplier
-            )
+                ola, _ = tmp_aug(ola, ola_mask)
+                ola_mask = cal_maskes_from_ola(
+                    ola, attention_mask, 
+                    is_casual=self.is_casual, 
+                    sigma_multiplier=self.outliers_sigma_multiplier
+                )
         # preprocess ola
         stack_ola_tensor = preprocess_ola(
             ola, ola_mask, 
