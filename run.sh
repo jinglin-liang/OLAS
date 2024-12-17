@@ -1,4 +1,4 @@
-GPU_LIST=('2' '3')
+GPU_LIST=('1' '2' '3')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -46,7 +46,8 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_roberta_base_conll2000chunk.json' 'configs/train_roberta_large_conll2000chunk.json' 'configs/train_albert_base_conll2000chunk.json' 'configs/train_albert_large_conll2000chunk.json' 'configs/train_gemma2_2b_conll2000chunk.json' 'configs/train_bloomz_3b_conll2000chunk.json';
+# for CFG in 'configs/train_bert_base_conll2000chunk.json' 'configs/train_roberta_base_conll2000chunk.json' 'configs/train_qwen2_1b_conll2000chunk.json' 'configs/train_gemma2_2b_conll2000chunk.json';
+for CFG in 'configs/train_qwen2_1b_conll2000chunk.json';
 do
     for LR in '1e-5' '3e-5';
     do

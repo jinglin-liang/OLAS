@@ -63,6 +63,10 @@ class ModelArguments:
         default=3.0,
         metadata={"help": "The sigma multiplier to determine outliers."},
     )
+    ola_augments: Optional[List[dict]] = field(
+        default=None,
+        metadata={"help": "The augmentations to use for OLA."},
+    )
     eval_models_name_list: List[str] = field(
         default_factory=lambda: [],
         metadata={"help": "The list of models to evaluate."},
@@ -75,6 +79,25 @@ class ModelArguments:
     def __post_init__(self):
         if len(self.eval_models_name_list) == 0:
             self.eval_models_name_list += self.train_models_name_list
+        if self.ola_augments is None:
+            self.ola_augments = [
+                {
+                    "class_name": "RandomHightlightColumns",
+                    "params": {
+                        "p": 0.3,
+                        "min_columns": 1,
+                        "max_columns": 3
+                    }
+                },
+                # {
+                #     "class_name": "AddGuassianNoise",
+                #     "params": {
+                #         "p": 1,
+                #         "mean": 0.0,
+                #         "std": 0.1
+                #     }
+                # }
+            ]
 
 
 @dataclass

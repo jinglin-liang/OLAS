@@ -97,7 +97,8 @@ def main():
             remove_outliers=model_args.remove_outliers,
             outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
             local_files_only=model_args.local_files_only,
-            abandom_base_lm=data_args.use_generated_oladata
+            abandom_base_lm=data_args.use_generated_oladata,
+            ola_augments=model_args.ola_augments,
         )
         model.print_trainable_parameters()
         model = model.train().cuda()
@@ -209,10 +210,11 @@ def main():
             model_args.use_orders,
             text_list,
             training_args.output_dir,
+            model_args.ola_augments,
             data_args.cutoff_len,
             model_args.outliers_sigma_multiplier,
             data_args.visual_annot_size,
-            data_args.visual_label_size,
+            data_args.visual_label_size
         )
 
     # do ola data generation

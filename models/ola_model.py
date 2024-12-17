@@ -10,6 +10,10 @@ from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, cal_maskes_from_ola
 from models.adapters import AxialTransformerAdapter
+from models.ola_augmentations import (
+    RandomHightlightColumns,
+    AddGuassianNoise
+)
 
 
 def is_causal_lm(model_type: str) -> bool:
@@ -71,6 +75,7 @@ class OLAModel(nn.Module):
         local_files_only: bool = True,
         outliers_sigma_multiplier: float = 3.0,
         abandom_base_lm: bool = False,
+        ola_augments: Optional[List[Dict]] = None,
         **kwargs,
     ):
         super(OLAModel, self).__init__()
@@ -78,6 +83,7 @@ class OLAModel(nn.Module):
         self._init_ola_adaptor(adapter_architecture, num_classes, 
                                use_orders, remove_outliers, outliers_sigma_multiplier)
         self._init_learnable_params()
+        self._init_ola_augmentation(ola_augments)
 
     def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm):
         self.base_model_name_list = base_model_name_list
@@ -139,6 +145,18 @@ class OLAModel(nn.Module):
         self.base_model_requires_grad_(False)
         # unfreeze prompt's parameters
         self.adapter_requires_grad_(True)
+
+    def _init_ola_augmentation(self, ola_augments):
+        if ola_augments is not None:
+            self.ola_augments = []
+            for tmp_aug in ola_augments:
+                class_name = tmp_aug["class_name"]
+                params = tmp_aug["params"]
+                self.ola_augments.append(
+                    globals()[class_name](**params)
+                )
+        else:
+            self.ola_augments = None
 
     def base_model_requires_grad_(self, requires_grad):
         if self.base_model is not None:
@@ -203,6 +221,15 @@ class OLAModel(nn.Module):
             is_casual=self.is_casual, 
             sigma_multiplier=self.outliers_sigma_multiplier
         )
+        # augments ola
+        if self.training and self.ola_augments is not None:
+            for tmp_aug in self.ola_augments:
+                ola, ola_mask = tmp_aug(ola, ola_mask)
+            ola_mask = cal_maskes_from_ola(
+                ola, attention_mask, 
+                is_casual=self.is_casual, 
+                sigma_multiplier=self.outliers_sigma_multiplier
+            )
         # preprocess ola
         stack_ola_tensor = preprocess_ola(
             ola, ola_mask, 

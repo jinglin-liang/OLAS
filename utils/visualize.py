@@ -1,4 +1,4 @@
-from typing import List
+from typing import Optional, List
 from tqdm import tqdm
 import os
 import math
@@ -53,6 +53,7 @@ def visualize_attn_map(
     use_orders: List[int],
     text_list: List[str],
     output_dir: str,
+    ola_augments: Optional[List[dict]] = None,
     cutoff_len: int = 320,
     outliers_sigma_multiplier: float = 3.0,
     annot_size: int = 1,
@@ -70,7 +71,8 @@ def visualize_attn_map(
             use_orders=use_orders,
             remove_outliers=False,
             outliers_sigma_multiplier=outliers_sigma_multiplier,
-        ).eval().cuda()
+            ola_augments=ola_augments,
+        ).train().cuda()
         model_dict[tmp_model_name] = tmp_model
         ola_list = []
         ola_mask_list = []
