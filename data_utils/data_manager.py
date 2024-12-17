@@ -15,7 +15,8 @@ from data_utils.data import (
 )
 from data_utils.ola_dataset import (
     get_oladata_dir_path,
-    OLADataset
+    OLADataset,
+    OLADataset_conll2012,
 )
 
 
@@ -24,12 +25,14 @@ class PartPaddingDataCollator:
         self,
         data_collator,
         keys_to_ignore: List[str] = None,
+        task: str = "pos"
     ) -> None:
         self.data_collator = data_collator
+        self.task = task
         if keys_to_ignore is None:
             self.keys_to_ignore = [
-                "text", "token_pos_tags", "token_chunk_tags", 
-                "tokens", "pos_tags", "chunk_tags", "id", "ola"
+                "text", "token_pos_tags", "token_chunk_tags", "token_named_entities_tags",
+                "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola", "task"
             ]
         else:
             self.keys_to_ignore = keys_to_ignore
@@ -65,6 +68,7 @@ class PartPaddingDataCollator:
                 [feature["ola"] for feature in features], 
                 batch["input_ids"].shape[1]
             )
+        batch["task"] = self.task
         return dict(batch)
 
 
@@ -75,7 +79,8 @@ class DataManager:
         cutoff_len: int,
         train_model_name_or_paths: List[str],
         test_model_name_or_paths: List[str],
-        use_generated_oladata: bool = False
+        use_generated_oladata: bool = False,
+        attn_type: str = "ola"
     ) -> None:
         self.dataset_name = dataset_name
         self.cutoff_len = cutoff_len
@@ -100,12 +105,25 @@ class DataManager:
         if dataset_name in ["conll2000_pos", "conll2000_chunk"]:
             kwargs["pos_tags_names"] = raw_train_data.features["pos_tags"].feature.names
             kwargs["chunk_tags_names"] = raw_train_data.features["chunk_tags"].feature.names
+        if dataset_name in ["conll2012cn_pos", "conll2012cn_entity", "conll2012en_pos", "conll2012en_entity"]:
+            kwargs["pos_tags_names"] = raw_train_data.features['sentences'][0]['pos_tags'].feature.names
+            kwargs["named_entities_names"] = raw_train_data.features['sentences'][0]['named_entities'].feature.names
         for tmp_train_model in train_model_name_or_paths:
             if self.use_generated_oladata:
                 data_dir_path = get_oladata_dir_path(
-                    dataset_name, tmp_train_model, "train"
+                    dataset_name, tmp_train_model, "train", attn_type
                 )
                 self.data["train"][tmp_train_model] = OLADataset(data_dir_path)
+            elif dataset_name in ["conll2012cn_pos", "conll2012cn_entity"]:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                kwargs["language"] = "cn"
+                kwargs["task"] = dataset_name.split("_")[-1]
+                self.data["train"][tmp_train_model] = OLADataset_conll2012(raw_train_data, **kwargs)
+            elif dataset_name in ["conll2012en_pos", "conll2012en_entity"]:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                kwargs["language"] = "en"
+                kwargs["task"] = dataset_name.split("_")[-1]
+                self.data["train"][tmp_train_model] = OLADataset_conll2012(raw_train_data, **kwargs)
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 preprocess_func = functools.partial(
@@ -119,9 +137,19 @@ class DataManager:
         for tmp_test_model in test_model_name_or_paths:
             if self.use_generated_oladata:
                 data_dir_path = get_oladata_dir_path(
-                    dataset_name, tmp_test_model, "test"
+                    dataset_name, tmp_test_model, "test", attn_type
                 )
                 self.data["test"][tmp_test_model] = OLADataset(data_dir_path)
+            elif dataset_name in ["conll2012cn_pos","conll2012cn_entity"]:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                kwargs["language"] = "cn"
+                kwargs["task"] = dataset_name.split("_")[-1]
+                self.data["test"][tmp_test_model] = OLADataset_conll2012(raw_test_data, **kwargs)
+            elif dataset_name in ["conll2012en_pos","conll2012en_entity"]:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                kwargs["language"] = "en"
+                kwargs["task"] = dataset_name.split("_")[-1]
+                self.data["test"][tmp_test_model] = OLADataset_conll2012(raw_test_data, **kwargs)
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 preprocess_func = functools.partial(
@@ -141,7 +169,7 @@ class DataManager:
             tokenizer.padding_side = "left"  # Allow batched inference
             self.tokenizer_dict[tmp_model] = tokenizer
 
-    def get_dataset_collator(self, model_name_list: List[str], split: str):
+    def get_dataset_collator(self, model_name_list: List[str], split: str, task: str = "pos"):
         assert split in ["train", "test"]
         for model_name_or_path in model_name_list:
             assert model_name_or_path in self.data[split].keys()
@@ -150,7 +178,7 @@ class DataManager:
             [self.data[split][model_name_or_path] for model_name_or_path in model_name_list]
         )
 
-        if self.dataset_name in ["conll2000_pos", "conll2000_chunk"]:
+        if self.dataset_name in ["conll2000_pos", "conll2000_chunk", "conll2012cn_pos", "conll2012en_pos", "conll2012cn_entity", "conll2012en_entity"]:
             base_data_collator = DataCollatorForTokenClassification(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
@@ -165,4 +193,4 @@ class DataManager:
                 pad_to_multiple_of=8
             )
 
-        return ret_dataset, PartPaddingDataCollator(base_data_collator)
+        return ret_dataset, PartPaddingDataCollator(base_data_collator, task=task)

@@ -19,6 +19,7 @@ from utils import (
     visualize_layer_attn_map,
     TextClsMetric,
     TokenClsMetric,
+    EntityMetric,
     ModelArguments, 
     DataArguments, 
     OLALMTrainingArguments as TrainingArguments,
@@ -80,7 +81,18 @@ def main():
         cutoff_len=data_args.cutoff_len,
         train_model_name_or_paths=model_args.train_models_name_list,
         test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata
+        use_generated_oladata=data_args.use_generated_oladata,
+        attn_type=data_args.attn_type
+    )
+
+    if data_args.othertest_dataset_name != None:
+        _data_manager = DataManager(
+        dataset_name=data_args.othertest_dataset_name,
+        cutoff_len=data_args.cutoff_len,
+        train_model_name_or_paths=model_args.train_models_name_list,
+        test_model_name_or_paths=model_args.eval_models_name_list,
+        use_generated_oladata=data_args.use_generated_oladata,
+        attn_type=data_args.attn_type
     )
 
     # do train
@@ -100,12 +112,13 @@ def main():
             local_files_only=model_args.local_files_only,
             abandom_base_lm=data_args.use_generated_oladata,
             ola_augments=model_args.ola_augments,
+            attn_type=data_args.attn_type
         )
         model.print_trainable_parameters()
         model = model.train().cuda()
         # load train dataset
         train_dataset, data_collator = data_manager.get_dataset_collator(
-            model_args.train_models_name_list, "train"
+            model_args.train_models_name_list, "train", training_args.task
         )
         trainer = OLALMTrainer(
             model=model,
@@ -126,6 +139,8 @@ def main():
 
     # do eval
     if training_args.do_eval:
+        if data_args.othertest_dataset_name != None:
+            data_manager = _data_manager
         # load eval adapter checkpoint
         if model_args.eval_adapter_checkpoint is None:
             eval_adapter_checkpoint = os.path.join(
@@ -145,7 +160,7 @@ def main():
             print(f"Evaluating model {eval_model_name}")
             # load eval dataset
             eval_dataset, data_collator = data_manager.get_dataset_collator(
-                [eval_model_name], "test"
+                [eval_model_name], "test", task=training_args.task
             )
             eval_dataloader = DataLoader(
                 eval_dataset,
@@ -156,9 +171,15 @@ def main():
             # load eval metric
             if data_args.dataset_name.lower() == "imdb":
                 eval_metric = TextClsMetric()
-            elif data_args.dataset_name.lower() == "conll2000_pos":
+            elif data_args.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos", "conll2012cn_pos"]:
                 if hasattr(eval_dataset.datasets[0], "features"):
-                    label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
+                    try:
+                        label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
+                    except:
+                        label_names = eval_dataset.datasets[0].features["pos_tags_names"]
+                    label_names.append("[None]")
+                elif hasattr(eval_dataset.datasets[0], "pos_tags_names"):
+                    label_names = eval_dataset.datasets[0].pos_tags_names
                     label_names.append("[None]")
                 else:
                     label_names = [str(i) for i in range(eval_args["num_classes"])]
@@ -171,6 +192,17 @@ def main():
                     label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
+            elif data_args.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
+                if hasattr(eval_dataset.datasets[0], "features"):
+                    eval_metric = EntityMetric(
+                        label_names=eval_dataset.datasets[0].features["named_entities_names"],
+                        tokenizer=data_manager.tokenizer_dict[eval_model_name],
+                    )
+                else:
+                    eval_metric = EntityMetric(
+                        label_names=eval_dataset.datasets[0].named_entities_names,
+                        tokenizer=data_manager.tokenizer_dict[eval_model_name],
+                    )
             else:
                 raise NotImplemented
             # create OLAModel
@@ -181,6 +213,7 @@ def main():
                 use_orders=eval_args["use_orders"],
                 remove_outliers=eval_args["remove_outliers"],
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
+                attn_type=data_args.attn_type
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
@@ -239,20 +272,22 @@ def main():
                 use_orders=model_args.use_orders,
                 remove_outliers=True,
                 outliers_sigma_multiplier=3,
+                attn_type=data_args.attn_type
             )
             for split in ["train", "test"]:
                 gen_dataset, gen_data_collator = data_manager.get_dataset_collator(
                     [model_name_or_path], split
                 )
                 gen_data_collator.data_collator.pad_to_multiple_of = None
-                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split)
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
                 generate_save_ola_data(
                     model,
                     gen_dataset,
                     gen_data_collator,
-                    save_dir
+                    save_dir,
+                    data_args.attn_type
                 )
             # Explicitly delete the model and clear cache
             del model

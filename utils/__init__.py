@@ -11,7 +11,8 @@ from .trainer import (
 from .evaluate import (
     evaluate_ola_adapter,
     TextClsMetric,
-    TokenClsMetric
+    TokenClsMetric,
+    EntityMetric
 )
 from .visualize import (
     visualize_attn_map,

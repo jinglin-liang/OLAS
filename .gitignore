@@ -2,4 +2,5 @@ outputs/
 __pycache__/
 .vscode/
 pretrained_models
-datasets/
+datasets
+compare_vis/

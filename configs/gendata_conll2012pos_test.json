@@ -1,0 +1,17 @@
+{
+    "train_models_name_list": [
+        "pretrained_models/bert-base-cased",
+        "pretrained_models/bert-large-cased"
+    ],
+    "dataset_name": "conll2012en_entity",
+    "cutoff_len": 64,
+    "do_train": false,
+    "do_eval": false,
+    "do_visualize": false,
+    "do_gen_save_ola": true,
+    "use_orders": [
+        1,
+        2,
+        3
+    ]
+}
