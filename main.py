@@ -80,7 +80,8 @@ def main():
         cutoff_len=data_args.cutoff_len,
         train_model_name_or_paths=model_args.train_models_name_list,
         test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata
+        use_generated_oladata=data_args.use_generated_oladata,
+        attn_type=data_args.attn_type
     )
 
     if data_args.othertest_dataset_name != None:
@@ -89,7 +90,8 @@ def main():
         cutoff_len=data_args.cutoff_len,
         train_model_name_or_paths=model_args.train_models_name_list,
         test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata
+        use_generated_oladata=data_args.use_generated_oladata,
+        attn_type=data_args.attn_type
     )
 
     # do train
@@ -107,7 +109,8 @@ def main():
             remove_outliers=model_args.remove_outliers,
             outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
             local_files_only=model_args.local_files_only,
-            abandom_base_lm=data_args.use_generated_oladata
+            abandom_base_lm=data_args.use_generated_oladata,
+            attn_type=data_args.attn_type
         )
         model.print_trainable_parameters()
         model = model.train().cuda()
@@ -208,6 +211,7 @@ def main():
                 use_orders=eval_args["use_orders"],
                 remove_outliers=eval_args["remove_outliers"],
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
+                attn_type=data_args.attn_type
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
@@ -254,20 +258,22 @@ def main():
                 use_orders=model_args.use_orders,
                 remove_outliers=True,
                 outliers_sigma_multiplier=3,
+                attn_type=data_args.attn_type
             )
             for split in ["train", "test"]:
                 gen_dataset, gen_data_collator = data_manager.get_dataset_collator(
                     [model_name_or_path], split
                 )
                 gen_data_collator.data_collator.pad_to_multiple_of = None
-                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split)
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
                 generate_save_ola_data(
                     model,
                     gen_dataset,
                     gen_data_collator,
-                    save_dir
+                    save_dir,
+                    data_args.attn_type
                 )
             # Explicitly delete the model and clear cache
             del model

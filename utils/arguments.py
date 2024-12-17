@@ -115,6 +115,10 @@ class DataArguments:
         default=False,
         metadata={"help": "Whether to use the generated OLA data."},
     )
+    attn_type: str = field(
+        default="ola",
+        metadata={"help": "The attention map type(ola, tandem, first, last)."},
+    )
 
     def __post_init__(self):
         if self.num_classes is None:

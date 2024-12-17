@@ -63,13 +63,13 @@ def get_outliers_mask(attn_map, interested_masked=None, sigma_multiplier=None):
     return outliers_mask.int()
 
 
-def cal_maskes_from_ola(order_to_attn_map, attention_mask, is_casual, sigma_multiplier=3.0):
+def cal_maskes(attn_map, attention_mask, is_casual, sigma_multiplier=3.0):
     attention_mask = attention_mask.unsqueeze(-1)
     unpadding_mask = attention_mask.float() @ attention_mask.transpose(1, 2).float()
     unpadding_mask = unpadding_mask.unsqueeze(1)
     interested_mask = get_interested_mask(unpadding_mask, is_casual)
     outliers_mask = {}
-    for k, v in order_to_attn_map.items():
+    for k, v in attn_map.items():
         if k == 0:
             outliers_mask[k] = torch.zeros_like(v)
         else:
@@ -80,7 +80,6 @@ def cal_maskes_from_ola(order_to_attn_map, attention_mask, is_casual, sigma_mult
         "outliers_mask": outliers_mask,
     }
     return maskes
-
 
 # def get_order_level_attention(attn_maps, attention_mask, is_casual, use_orders=None, sigma_multiplier=3.0):
 #     if use_orders is None:
@@ -96,3 +95,12 @@ def get_order_level_attention(attn_maps, attention_mask, use_orders=None):
         use_orders = [1, 2, 3]
     order_to_attn_map = combine_attention_orders(attn_maps, attention_mask, use_orders)
     return order_to_attn_map
+
+def get_tandem_level_attention(attn_maps, attention_mask):
+    attn_maps = [(attn_map * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1) for attn_map in attn_maps]
+    tmp_attn_map = attn_maps[0]
+    tandem_attn_map = tmp_attn_map + torch.eye(tmp_attn_map.size(-1)).expand_as(tmp_attn_map).to(tmp_attn_map)
+    for tmp_attn_map in attn_maps[1:]:
+        tandem_attn_map = torch.matmul(tmp_attn_map, tandem_attn_map) + tandem_attn_map
+    tandem_to_attn_map = {1:tandem_attn_map.unsqueeze(1)}
+    return tandem_to_attn_map

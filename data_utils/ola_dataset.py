@@ -12,13 +12,14 @@ import data_utils
 from data_utils.data import DATASET_NAME_TO_PATH
 
 
-def get_oladata_dir_path(dataset_name, model_name_or_path, split):
+def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type):
     if os.path.isfile(DATASET_NAME_TO_PATH[dataset_name]):
-        data_root_dir = os.path.dirname(DATASET_NAME_TO_PATH[dataset_name]) + "_ola"
+        data_root_dir = os.path.dirname(DATASET_NAME_TO_PATH[dataset_name])
     elif os.path.isdir(DATASET_NAME_TO_PATH[dataset_name]):
-        data_root_dir = DATASET_NAME_TO_PATH[dataset_name] + "_ola"
+        data_root_dir = DATASET_NAME_TO_PATH[dataset_name]
     else:
         raise ValueError("Invalid dataset path")
+    data_root_dir = data_root_dir + "_" + attn_type
     if dataset_name == "conll2000_pos":
         data_root_dir = data_root_dir + "_pos"
     elif dataset_name == "conll2000_chunk":
@@ -50,6 +51,7 @@ def generate_save_ola_data(
     dataset,
     data_collator,
     save_dir: str,
+    attn_type: str = "ola"
 ):
     # create dataloader
     dataloader = DataLoader(
@@ -73,12 +75,13 @@ def generate_save_ola_data(
             continue
         with torch.no_grad():
             input_dict = {k: v for k, v in data.items() if k in interested_keys}
-            input_dict["output_ola"] = True
+            input_dict["output_attn"] = True
             input_dict["labels"] = None
+            input_dict["attn_type"] = attn_type
             output = model(
                 **input_dict
             )
-        ola = output.order_level_attention
+        attn = output.order_level_attention
         tmp_data = {}
         for k, v in data.items():
             if isinstance(v, torch.Tensor):
@@ -87,7 +90,7 @@ def generate_save_ola_data(
             else:
                 # "token_pos_tags", "token_chunk_tags"
                 tmp_data[k] = v[0]
-        tmp_data["ola"] = {k: v.cpu() for k, v in ola.items()}
+        tmp_data["ola"] = {k: v.cpu() for k, v in attn.items()}
         data_byte = pickle.dumps(tmp_data)
         data_id = str(cnt).encode("utf-8")
         cache[data_id] = data_byte

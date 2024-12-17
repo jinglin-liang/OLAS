@@ -8,7 +8,7 @@ from transformers import AutoConfig, AutoTokenizer
 from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
-from models.ola_utils import get_order_level_attention, cal_maskes_from_ola
+from models.ola_utils import get_order_level_attention, get_tandem_level_attention, cal_maskes
 from models.adapters import AxialTransformerAdapter
 
 
@@ -71,12 +71,13 @@ class OLAModel(nn.Module):
         local_files_only: bool = True,
         outliers_sigma_multiplier: float = 3.0,
         abandom_base_lm: bool = False,
+        attn_type: str = "ola",
         **kwargs,
     ):
         super(OLAModel, self).__init__()
         self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
-                               use_orders, remove_outliers, outliers_sigma_multiplier)
+                               use_orders, remove_outliers, outliers_sigma_multiplier, attn_type)
         self._init_learnable_params()
 
     def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm):
@@ -112,13 +113,16 @@ class OLAModel(nn.Module):
         self.tokenizer = self.all_tokenizer[base_model_name_list[0]]
             
     def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
-                          remove_outliers, outliers_sigma_multiplier):
+                          remove_outliers, outliers_sigma_multiplier, attn_type="ola"):
         self.adapter_architecture = adapter_architecture
         self.remove_outliers = remove_outliers
         self.outliers_sigma_multiplier = outliers_sigma_multiplier
         self.use_orders = use_orders
         self.num_classes = num_classes
-        ola_input_channal = len(use_orders) * (1 + int(remove_outliers))
+        if attn_type == "ola":
+            ola_input_channal = len(use_orders) * (1 + int(remove_outliers))
+        else:
+            ola_input_channal = (1 + int(remove_outliers))
         if adapter_architecture == "textcls_resnet18":
             self.adaptor = resnet18(num_classes=num_classes)
             self.adaptor.conv1 = nn.Conv2d(
@@ -168,17 +172,21 @@ class OLAModel(nn.Module):
         ola: Optional[Dict[int, torch.FloatTensor]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_ola: Optional[bool] = None,
+        output_attn: Optional[bool] = None,
         task: Optional[str] = "pos",
+        attn_type: str = "ola",
+        output_tandem: Optional[bool] = False,
         **kwargs,
     ) -> Union[OLALMOutput]:
+        assert attn_type in ["ola", "tandem", "first", "last", "flow"]
+        attn = ola
         # move inputs to device
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
         if labels is not None:
             labels = labels.to(self.device)
-        # calculate ola
-        if ola is None:
+        # calculate attn map
+        if attn is None:
             # base model forward
             output = self.base_model(
                 input_ids=input_ids,
@@ -190,23 +198,33 @@ class OLAModel(nn.Module):
                 return_dict=True
             )
             # get order level attention
-            ola = get_order_level_attention(
-                output.attentions, 
-                attention_mask, 
-                use_orders=self.use_orders,
-            )
+            if attn_type == "ola":
+                attn = get_order_level_attention(
+                    output.attentions, 
+                    attention_mask, 
+                    use_orders=self.use_orders,
+                )
+            elif attn_type == "tandem":
+                attn = get_tandem_level_attention(
+                    output.attentions, 
+                    attention_mask
+                )
+            elif attn_type == "first":
+                attn = {1:(output.attentions[0] * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1).unsqueeze(1)}
+            elif attn_type == "last":
+                attn = {1:(output.attentions[-1] * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1).unsqueeze(1)}
         else:
-            ola = {k: v.to(self.device) 
-                   for k, v in ola.items() if k in self.use_orders}
+            attn = {k: v.to(self.device) 
+                   for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
         # calculate maskes from ola
-        ola_mask = cal_maskes_from_ola(
-            ola, attention_mask, 
+        attn_mask = cal_maskes(
+            attn, attention_mask, 
             is_casual=self.is_casual, 
             sigma_multiplier=self.outliers_sigma_multiplier
         )
         # preprocess ola
         stack_ola_tensor = preprocess_ola(
-            ola, ola_mask, 
+            attn, attn_mask, 
             remove_outliers=self.remove_outliers, 
             is_casual=self.is_casual
         )
@@ -242,9 +260,9 @@ class OLAModel(nn.Module):
         return OLALMOutput(
             logits=prediction_scores,
             loss=loss,
-            order_level_attention=ola if output_ola else None,
-            ola_maskes=ola_mask if output_ola else None,
-            layer_attentions=output.attentions if output_attentions else None,
+            order_level_attention=attn if output_attn else None,
+            ola_maskes=attn_mask if output_attn else None,
+            layer_attentions=output.attentions if output_attentions else None
         )
 
     def print_trainable_parameters(self):

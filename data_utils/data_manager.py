@@ -79,7 +79,8 @@ class DataManager:
         cutoff_len: int,
         train_model_name_or_paths: List[str],
         test_model_name_or_paths: List[str],
-        use_generated_oladata: bool = False
+        use_generated_oladata: bool = False,
+        attn_type: str = "ola"
     ) -> None:
         self.dataset_name = dataset_name
         self.cutoff_len = cutoff_len
@@ -110,7 +111,7 @@ class DataManager:
         for tmp_train_model in train_model_name_or_paths:
             if self.use_generated_oladata:
                 data_dir_path = get_oladata_dir_path(
-                    dataset_name, tmp_train_model, "train"
+                    dataset_name, tmp_train_model, "train", attn_type
                 )
                 self.data["train"][tmp_train_model] = OLADataset(data_dir_path)
             elif dataset_name in ["conll2012cn_pos", "conll2012cn_entity"]:
@@ -136,7 +137,7 @@ class DataManager:
         for tmp_test_model in test_model_name_or_paths:
             if self.use_generated_oladata:
                 data_dir_path = get_oladata_dir_path(
-                    dataset_name, tmp_test_model, "test"
+                    dataset_name, tmp_test_model, "test", attn_type
                 )
                 self.data["test"][tmp_test_model] = OLADataset(data_dir_path)
             elif dataset_name in ["conll2012cn_pos","conll2012cn_entity"]:
