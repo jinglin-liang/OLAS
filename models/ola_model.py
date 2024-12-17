@@ -305,7 +305,9 @@ class OLAModel(nn.Module):
             padding=False,
         )
         batch_input = collator_fn(tokenized_text_ls)
-        output = self(**batch_input, output_ola=True)
-        output_ola = output.order_level_attention
-        output_ola_mask = output.ola_maskes
-        return output_ola, output_ola_mask
+        output = self(
+            **batch_input, 
+            output_ola=True, 
+            output_attentions=True
+        )
+        return output

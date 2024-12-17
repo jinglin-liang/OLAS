@@ -16,6 +16,7 @@ from utils import (
     save_arguments,
     evaluate_ola_adapter,
     visualize_attn_map,
+    visualize_layer_attn_map,
     TextClsMetric,
     TokenClsMetric,
     ModelArguments, 
@@ -205,7 +206,18 @@ def main():
         with open(data_args.visual_text_file, "r") as f:
             text_list = f.readlines()
         text_list = [text.rstrip('\n') for text in text_list]
-        visualize_attn_map(
+        # visualize_attn_map(
+        #     model_args.train_models_name_list,
+        #     model_args.use_orders,
+        #     text_list,
+        #     training_args.output_dir,
+        #     model_args.ola_augments,
+        #     data_args.cutoff_len,
+        #     model_args.outliers_sigma_multiplier,
+        #     data_args.visual_annot_size,
+        #     data_args.visual_label_size
+        # )
+        visualize_layer_attn_map(
             model_args.train_models_name_list,
             model_args.use_orders,
             text_list,
