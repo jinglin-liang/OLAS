@@ -12,7 +12,8 @@ from models.ola_utils import get_order_level_attention, get_tandem_level_attenti
 from models.adapters import AxialTransformerAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
-    AddGuassianNoise
+    AddGuassianNoise,
+    RandomTemperatureScaling
 )
 
 
@@ -332,7 +333,7 @@ class OLAModel(nn.Module):
         batch_input = collator_fn(tokenized_text_ls)
         output = self(
             **batch_input, 
-            output_ola=True, 
+            output_attn=True, 
             output_attentions=True
         )
         return output
