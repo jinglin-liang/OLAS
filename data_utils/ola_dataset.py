@@ -101,13 +101,15 @@ def generate_save_ola_data(
         # if cnt == 20:
         #     break
     cache["num_samples".encode('utf-8')] = str(cnt).encode("utf-8")
-    features = {}
     if isinstance(dataset.datasets[0], OLADataset_conll2012):
         features = {
             "pos_tags_names": dataset.datasets[0].pos_tags_names,
             "named_entities_names": dataset.datasets[0].named_entities_names
         }
-    cache["features".encode('utf-8')] = pickle.dumps(features)
+        cache["features".encode('utf-8')] = pickle.dumps(features)
+    elif hasattr(dataset.datasets[0], "features"):
+        features = dataset.datasets[0].features
+        cache["features".encode('utf-8')] = pickle.dumps(features)
     write_cache(env, cache)
     print('save {} samples to {}'.format(cnt, save_dir))
     env.close()
