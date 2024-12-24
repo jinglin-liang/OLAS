@@ -7,12 +7,16 @@ class RandomHightlightColumns(nn.Module):
         self, 
         p: float = 0.5, 
         min_columns: int = 1, 
-        max_columns: int = 6
+        max_columns: int = 6,
+        ref_rank1: int = 0,
+        ref_rank2: int = 1,
     ):
         super(RandomHightlightColumns, self).__init__()
         self.p = p  # probability of applying this augmentation
         self.min_columns = min_columns
         self.max_columns = max_columns
+        self.ref_rank1 = ref_rank1  # affect the sink bias value
+        self.ref_rank2 = ref_rank2
 
     def forward(self, ola, ola_mask):
         if torch.rand(1) > self.p:
@@ -35,10 +39,12 @@ class RandomHightlightColumns(nn.Module):
     def heightlight_columns(self, ola, interested_mask, select_cols):
         ret_ola = {}
         for tmp_o, tmp_ola in ola.items():
-            top2_v, _ = torch.topk(tmp_ola, k=2, dim=-1)
-            m1 = top2_v[..., 0].unsqueeze(-1)
+            ref_rank1 = min(tmp_ola.size(-1)-1, self.ref_rank1)
+            ref_rank2 = min(tmp_ola.size(-1)-1, self.ref_rank2)
+            topk_v, _ = torch.topk(tmp_ola, k=max(ref_rank1, ref_rank2)+1, dim=-1)
+            m1 = topk_v[..., ref_rank1].unsqueeze(-1)
             m1 = m1.expand(m1.shape[:-1] + select_cols.shape[-1:])
-            m2 = top2_v[..., 1].unsqueeze(-1)
+            m2 = topk_v[..., ref_rank2].unsqueeze(-1)
             m2 = m2.expand(m2.shape[:-1] + select_cols.shape[-1:])
             rand_f_shape = list(m2.shape)
             rand_f_shape[-2] = 1
