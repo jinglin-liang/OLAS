@@ -2,7 +2,7 @@
     "train_models_name_list": [
         "pretrained_models/bloomz-3b"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2000_pos",
     "cutoff_len": 64,
     "logging_steps": 10,
