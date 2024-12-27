@@ -10,7 +10,7 @@
         "pretrained_models/albert-base-v2",
         "pretrained_models/albert-large-v2"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2000_chunk",
     "cutoff_len": 64,
     "logging_steps": 10,

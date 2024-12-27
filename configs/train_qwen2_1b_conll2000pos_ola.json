@@ -4,7 +4,7 @@
         "pretrained_models/Qwen2-1.5B-Instruct",
         "pretrained_models/Qwen2-7B-Instruct"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2000_pos",
     "cutoff_len": 64,
     "logging_steps": 10,

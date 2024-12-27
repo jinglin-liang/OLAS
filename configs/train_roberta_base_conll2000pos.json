@@ -2,7 +2,15 @@
     "train_models_name_list": [
         "pretrained_models/roberta-base"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "eval_models_name_list": [
+        "pretrained_models/bert-base-cased",
+        "pretrained_models/bert-large-cased",
+        "pretrained_models/roberta-base",
+        "pretrained_models/roberta-large",
+        "pretrained_models/albert-base-v2",
+        "pretrained_models/albert-large-v2"
+    ],
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2000_pos",
     "cutoff_len": 64,
     "logging_steps": 10,

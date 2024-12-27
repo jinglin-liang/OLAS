@@ -137,7 +137,7 @@ def main():
         os.makedirs(os.path.dirname(last_ckpt_path), exist_ok=True)
         model.save_adapter(last_ckpt_path)
         # Explicitly delete the model and clear cache
-        del model
+        del model, trainer
         torch.cuda.empty_cache()
 
     # do eval
@@ -270,6 +270,17 @@ def main():
             data_args.visual_annot_size,
             data_args.visual_label_size
         )
+        # visualize_layer_attn_map(
+        #     model_args.train_models_name_list,
+        #     model_args.use_orders,
+        #     text_list,
+        #     training_args.output_dir,
+        #     model_args.ola_augments,
+        #     data_args.cutoff_len,
+        #     model_args.outliers_sigma_multiplier,
+        #     data_args.visual_annot_size,
+        #     data_args.visual_label_size
+        # )
 
     # do ola data generation
     if training_args.do_gen_save_ola:

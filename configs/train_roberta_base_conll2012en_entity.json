@@ -2,7 +2,7 @@
     "train_models_name_list": [
         "pretrained_models/roberta-base"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2012en_entity",
     "task": "entity",
     "cutoff_len": 64,

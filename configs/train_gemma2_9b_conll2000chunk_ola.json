@@ -13,7 +13,7 @@
         "pretrained_models/bloomz-3b",
         "pretrained_models/bloomz-7b1"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
+    "adapter_architecture": "tokencls_axialtranformerrnn",
     "dataset_name": "conll2000_chunk",
     "cutoff_len": 64,
     "logging_steps": 10,

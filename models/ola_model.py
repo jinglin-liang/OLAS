@@ -9,10 +9,11 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
-    AddGuassianNoise
+    AddGuassianNoise,
+    RandomTemperatureScaling
 )
 
 
@@ -143,6 +144,8 @@ class OLAModel(nn.Module):
             )
         elif adapter_architecture == "tokencls_axialtranformer":
             self.adaptor = AxialTransformerAdapter(in_channels=ola_input_channal, out_channels=num_classes, hidden_size=adapter_hidden_size, num_layers=num_layers)
+        elif adapter_architecture == "tokencls_axialtranformerrnn":
+            self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -269,9 +272,6 @@ class OLAModel(nn.Module):
         elif "tokencls" in self.adapter_architecture:
             # adaptor forward
             prediction_scores = self.adaptor(stack_attn_tensor)
-            idx_tensor = torch.arange(prediction_scores.size(-1)).to(prediction_scores.device)
-            prediction_scores = prediction_scores[:, :, idx_tensor, idx_tensor]
-            prediction_scores = prediction_scores.transpose(1, 2).contiguous()
             if labels is not None:
                 if task != "entity":
                     loss_fct = nn.CrossEntropyLoss()
@@ -334,7 +334,7 @@ class OLAModel(nn.Module):
         batch_input = collator_fn(tokenized_text_ls)
         output = self(
             **batch_input, 
-            output_ola=True, 
+            output_attn=True, 
             output_attentions=True
         )
         return output

@@ -5,12 +5,16 @@ import json
 import os
 from tqdm import tqdm
 
+import numpy as np
+import pandas as pd
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+import matplotlib.pyplot as plt
 
 from models import OLAModel
+from utils.visualize import draw_attn_heatmap
 
 
 @dataclass
@@ -62,6 +66,9 @@ class TokenClsMetric(TextClsMetric):
     label_names: Optional[List[str]] = None
     tokenizer: Optional[AutoTokenizer] = None
 
+    def __post_init__(self):
+        self.confuse_matrix = np.zeros((len(self.label_names), len(self.label_names)))
+
     def judge(self, predictions: Tensor, labels: Tensor, data: Dict = None):
         '''
         predictions: (n, l, c)
@@ -91,6 +98,7 @@ class TokenClsMetric(TextClsMetric):
                     sample["token:label->pred"].append(
                         f"{self.tokenizer.decode(data['input_ids'][i][j].item())}: {self.label_names[data['labels'][i][j].item()]} -> {self.label_names[preds[i][j].item()]}"
                     )
+                    self.confuse_matrix[data['labels'][i][j].item(), preds[i][j].item()] += 1
                 self.all_samples.append(sample)
                 if ((preds[i] == labels[i]) * attention_mask[i]).sum(-1) == attention_mask[i].sum(-1):
                     self.positive_samples.append(sample)
@@ -99,6 +107,25 @@ class TokenClsMetric(TextClsMetric):
 
     def metric_string(self):
         return f"Accuracy={self.accuracy:.4f}, Line-level_Accuracy={self.line_level_accuracy:.4f}."
+    
+    def write_confusion_matrix(
+            self, 
+            csv_file_path: Optional[str] = None,
+            pic_file_path: Optional[str] = None,
+        ):
+        if csv_file_path is not None:
+            os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
+            confuse_df = pd.DataFrame(self.confuse_matrix, columns=self.label_names, index=self.label_names)
+            confuse_df.to_csv(csv_file_path)
+        if pic_file_path is not None:
+            os.makedirs(os.path.dirname(pic_file_path), exist_ok=True)
+            cf_tensor = torch.tensor(self.confuse_matrix)[None, None, :, :]
+            cf_tensor = cf_tensor / (cf_tensor.sum(-1, keepdim=True) + 1e-10)
+            tick_ls = self.label_names
+            draw_attn_heatmap(cf_tensor, tick_ls, tick_ls, "Confusion Matrix", annot_size=2, label_size=4)
+            plt.gcf().set_size_inches(8, 8)
+            plt.savefig(pic_file_path, dpi=450)
+            plt.clf()
 
 
 class MultiTokenMetric(TokenClsMetric):
@@ -206,4 +233,7 @@ def evaluate_ola_adapter(
             json.dump(eval_metric.positive_samples, f, indent=4)
         with open(os.path.join(output_dir, f"negative_results.json"), "w") as f:
             json.dump(eval_metric.negative_samples, f, indent=4)
+        if hasattr(eval_metric, "write_confusion_matrix") and callable(getattr(eval_metric, "write_confusion_matrix")):
+            eval_metric.write_confusion_matrix(os.path.join(output_dir, "confusion_matrix.csv"),
+                                               os.path.join(output_dir, "confusion_matrix.png"))
     print(f"{eval_metric.metric_string()}\nResults are saved to {output_dir}")

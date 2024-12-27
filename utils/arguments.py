@@ -94,16 +94,36 @@ class ModelArguments:
                     "params": {
                         "p": 0.3,
                         "min_columns": 1,
-                        "max_columns": 3
+                        "max_columns": 3,
+                        "ref_rank1": 0,
+                        "ref_rank2": 1
                     }
                 },
+                # {
+                #     "class_name": "RandomHightlightColumns",
+                #     "params": {
+                #         "p": 0.2,
+                #         "min_columns": 1,
+                #         "max_columns": 6,
+                #         "ref_rank1": 3,
+                #         "ref_rank2": 4
+                #     }
+                # },
                 {
                     "class_name": "AddGuassianNoise",
                     "params": {
-                        "p": 0.3,
-                        "std_ratio": 0.2
+                        "p": 0.15,
+                        "std_ratio": 0.13
                     }
-                }
+                },
+                # {
+                #     "class_name": "RandomTemperatureScaling",
+                #     "params": {
+                #         "p": 0.2,
+                #         "min_temp": 0.6,
+                #         "max_temp": 3
+                #     }
+                # }
             ]
 
 
