@@ -1,4 +1,4 @@
-GPU_LIST=('0' '3')
+GPU_LIST=('5' '6')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -46,9 +46,9 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_bert_base_conll2000chunk.json' 'configs/train_roberta_base_conll2000chunk.json' 'configs/train_qwen2_1b_conll2000chunk.json' 'configs/train_gemma2_2b_conll2000chunk.json';
+for CFG in 'configs/train_qwen2_1b_conll2012en_entity.json';
 do
-    for LR in '1e-5' '3e-5';
+    for EP in '10' '15';
     do
         while true
         do
@@ -56,9 +56,9 @@ do
             have_free_gpu=$?
             if [ $have_free_gpu -eq 1 ]
             then
-                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_lr_${LR}.log
+                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_ep_${EP}.log
                 {
-                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR >> $LOG_FILE 2>&1
+                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --num_train_epochs $EP >> $LOG_FILE 2>&1
                 } &
                 training_pid=$!
                 for used_gpu in "${FREE_GPUS[@]}"; do

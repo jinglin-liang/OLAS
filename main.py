@@ -19,7 +19,7 @@ from utils import (
     visualize_layer_attn_map,
     TextClsMetric,
     TokenClsMetric,
-    EntityMetric,
+    MultiTokenMetric,
     ModelArguments, 
     DataArguments, 
     OLALMTrainingArguments as TrainingArguments,
@@ -82,7 +82,8 @@ def main():
         train_model_name_or_paths=model_args.train_models_name_list,
         test_model_name_or_paths=model_args.eval_models_name_list,
         use_generated_oladata=data_args.use_generated_oladata,
-        attn_type=data_args.attn_type
+        attn_type=data_args.attn_type,
+        do_classify_data_generate=data_args.do_classify_data_generate
     )
 
     if data_args.othertest_dataset_name != None:
@@ -106,6 +107,8 @@ def main():
             base_model_name_list=model_args.train_models_name_list,
             adapter_architecture=model_args.adapter_architecture,
             num_classes=data_args.num_classes,
+            adapter_hidden_size=model_args.adapter_hidden_size,
+            num_layers=model_args.num_layers,
             use_orders=model_args.use_orders,
             remove_outliers=model_args.remove_outliers,
             outliers_sigma_multiplier=model_args.outliers_sigma_multiplier,
@@ -188,18 +191,18 @@ def main():
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             elif data_args.dataset_name.lower() == "conll2000_chunk":
-                eval_metric = TokenClsMetric(
+                eval_metric = MultiTokenMetric(
                     label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             elif data_args.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
                 if hasattr(eval_dataset.datasets[0], "features"):
-                    eval_metric = EntityMetric(
+                    eval_metric = MultiTokenMetric(
                         label_names=eval_dataset.datasets[0].features["named_entities_names"],
                         tokenizer=data_manager.tokenizer_dict[eval_model_name],
                     )
                 else:
-                    eval_metric = EntityMetric(
+                    eval_metric = MultiTokenMetric(
                         label_names=eval_dataset.datasets[0].named_entities_names,
                         tokenizer=data_manager.tokenizer_dict[eval_model_name],
                     )
@@ -210,6 +213,8 @@ def main():
                 base_model_name_list=[eval_model_name,],
                 adapter_architecture=eval_args["adapter_architecture"],
                 num_classes=eval_args["num_classes"],
+                adapter_hidden_size=eval_args["adapter_hidden_size"],
+                num_layers=eval_args["num_layers"],
                 use_orders=eval_args["use_orders"],
                 remove_outliers=eval_args["remove_outliers"],
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
@@ -217,7 +222,7 @@ def main():
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
-                f"eval_{os.path.basename(eval_model_name)}"
+                f"eval_{data_args.dataset_name.lower()}_{data_args.attn_type}_{os.path.basename(eval_model_name)}"
             )
             # evaluate
             evaluate_ola_adapter(
@@ -245,6 +250,8 @@ def main():
         #     text_list,
         #     training_args.output_dir,
         #     model_args.ola_augments,
+        #     model_args.adapter_hidden_size,
+        #     model_args.num_layers,
         #     data_args.cutoff_len,
         #     model_args.outliers_sigma_multiplier,
         #     data_args.visual_annot_size,
@@ -256,6 +263,8 @@ def main():
             text_list,
             training_args.output_dir,
             model_args.ola_augments,
+            model_args.adapter_hidden_size,
+            model_args.num_layers,
             data_args.cutoff_len,
             model_args.outliers_sigma_multiplier,
             data_args.visual_annot_size,
@@ -269,17 +278,20 @@ def main():
                 base_model_name_list=[model_name_or_path,],
                 adapter_architecture="tokencls_axialtranformer",
                 num_classes=data_args.num_classes,
+                adapter_hidden_size=model_args.adapter_hidden_size,
+                num_layers=model_args.num_layers,
                 use_orders=model_args.use_orders,
                 remove_outliers=True,
                 outliers_sigma_multiplier=3,
                 attn_type=data_args.attn_type
             )
-            for split in ["train", "test"]:
+            splits = ["train", "test"] if not data_args.do_classify_data_generate else ["train"]
+            for split in splits:
                 gen_dataset, gen_data_collator = data_manager.get_dataset_collator(
                     [model_name_or_path], split
                 )
                 gen_data_collator.data_collator.pad_to_multiple_of = None
-                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type)
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
                 generate_save_ola_data(

@@ -70,6 +70,8 @@ class OLAModel(nn.Module):
         base_model_name_list: List[str],
         adapter_architecture: str,
         num_classes: int,
+        adapter_hidden_size: int = 768,
+        num_layers: int = 5,
         use_orders: List[int] = [1, 2, 3],
         remove_outliers: bool = False,
         local_files_only: bool = True,
@@ -81,7 +83,7 @@ class OLAModel(nn.Module):
     ):
         super(OLAModel, self).__init__()
         self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm)
-        self._init_ola_adaptor(adapter_architecture, num_classes, 
+        self._init_ola_adaptor(adapter_architecture, num_classes, adapter_hidden_size, num_layers,
                                use_orders, remove_outliers, outliers_sigma_multiplier, attn_type)
         self._init_learnable_params()
         self._init_ola_augmentation(ola_augments)
@@ -118,7 +120,7 @@ class OLAModel(nn.Module):
         self.is_casual = is_casual_list[0]
         self.tokenizer = self.all_tokenizer[base_model_name_list[0]]
             
-    def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
+    def _init_ola_adaptor(self, adapter_architecture, num_classes, adapter_hidden_size, num_layers, use_orders, 
                           remove_outliers, outliers_sigma_multiplier, attn_type="ola"):
         self.adapter_architecture = adapter_architecture
         self.remove_outliers = remove_outliers
@@ -140,7 +142,7 @@ class OLAModel(nn.Module):
                 mode="fan_out", nonlinearity="relu"
             )
         elif adapter_architecture == "tokencls_axialtranformer":
-            self.adaptor = AxialTransformerAdapter(ola_input_channal, num_classes)
+            self.adaptor = AxialTransformerAdapter(in_channels=ola_input_channal, out_channels=num_classes, hidden_size=adapter_hidden_size, num_layers=num_layers)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 

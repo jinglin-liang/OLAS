@@ -55,6 +55,14 @@ class ModelArguments:
         default_factory=lambda: [1, 2, 3],
         metadata={"help": "The orders of attention maps to use."},
     )
+    adapter_hidden_size: int = field(
+        default=768,
+        metadata={"help": "The hidden size of adapter."},
+    )
+    num_layers: int = field(
+        default=5,
+        metadata={"help": "The layer number of adapter."},
+    )
     remove_outliers: bool = field(
         default=True,
         metadata={"help": "Whether to remove outliers from attention maps."},
@@ -140,6 +148,10 @@ class DataArguments:
     attn_type: str = field(
         default="ola",
         metadata={"help": "The attention map type(ola, tandem, first, last)."},
+    )
+    do_classify_data_generate: bool = field(
+        default=False,
+        metadata={"help": "Whether to do classify data generate."},
     )
 
     def __post_init__(self):
