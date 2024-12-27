@@ -1,4 +1,5 @@
 {
+    "use_generated_oladata": true,
     "train_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct"
     ],

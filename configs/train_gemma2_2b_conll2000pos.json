@@ -1,4 +1,5 @@
 {
+    "use_generated_oladata": true,
     "train_models_name_list": [
         "pretrained_models/gemma-2-2b-it"
     ],

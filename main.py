@@ -213,7 +213,8 @@ def main():
                 use_orders=eval_args["use_orders"],
                 remove_outliers=eval_args["remove_outliers"],
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
-                attn_type=data_args.attn_type
+                attn_type=data_args.attn_type,
+                abandom_base_lm=data_args.use_generated_oladata,
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
