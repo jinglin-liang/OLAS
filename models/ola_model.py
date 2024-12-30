@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
@@ -83,7 +83,7 @@ class OLAModel(nn.Module):
         super(OLAModel, self).__init__()
         self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
-                               use_orders, remove_outliers, outliers_sigma_multiplier, attn_type)
+                               use_orders, remove_outliers, outliers_sigma_multiplier, attn_type, **kwargs)
         self._init_learnable_params()
         self._init_ola_augmentation(ola_augments)
 
@@ -120,7 +120,7 @@ class OLAModel(nn.Module):
         self.tokenizer = self.all_tokenizer[base_model_name_list[0]]
             
     def _init_ola_adaptor(self, adapter_architecture, num_classes, use_orders, 
-                          remove_outliers, outliers_sigma_multiplier, attn_type="ola"):
+                          remove_outliers, outliers_sigma_multiplier, attn_type="ola", **kwargs):
         self.adapter_architecture = adapter_architecture
         self.remove_outliers = remove_outliers
         self.outliers_sigma_multiplier = outliers_sigma_multiplier
@@ -141,9 +141,11 @@ class OLAModel(nn.Module):
                 mode="fan_out", nonlinearity="relu"
             )
         elif adapter_architecture == "tokencls_axialtranformer":
-            self.adaptor = AxialTransformerAdapter(ola_input_channal, num_classes)
+            self.adaptor = AxialTransformerAdapter(ola_input_channal, num_classes, **kwargs)
         elif adapter_architecture == "tokencls_axialtranformerrnn":
-            self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes)
+            self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes, **kwargs)
+        elif adapter_architecture == "tokencls_unet":
+            self.adaptor = UNet(ola_input_channal, num_classes, **kwargs)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 

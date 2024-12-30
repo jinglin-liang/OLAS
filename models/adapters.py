@@ -13,7 +13,8 @@ class AxialTransformerAdapter(nn.Module):
         hidden_size=768,
         num_layers=5,
         heads=8,
-        reversible=True
+        reversible=True,
+        **kwargs
     ):
         super().__init__()
         self.input_conv = nn.Conv2d(in_channels, hidden_size, 1)
@@ -49,7 +50,8 @@ class AxialTransformerRnnAdapter(nn.Module):
         axial_tf_layers=5,
         rnn_layers=2,
         heads=8,
-        reversible=True
+        reversible=True,
+        **kwargs
     ):
         super().__init__()
         assert hidden_size % heads == 0, "hidden_size must be divisible by heads."
@@ -155,10 +157,10 @@ class AxialTransformerRnnAdapter(nn.Module):
 # from https://github.com/mateuszbuda/brain-segmentation-pytorch/blob/master/unet.py
 class UNet(nn.Module):
 
-    def __init__(self, in_channels=3, out_channels=1, init_features=32):
+    def __init__(self, in_channels=3, out_channels=1, unet_init_features=32, **kwargs):
         super(UNet, self).__init__()
 
-        features = init_features
+        features = unet_init_features
         self.encoder1 = UNet._block(in_channels, features, name="enc1")
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.encoder2 = UNet._block(features, features * 2, name="enc2")
@@ -211,7 +213,12 @@ class UNet(nn.Module):
         dec1 = self.upconv1(dec2)
         dec1 = torch.cat((dec1, enc1), dim=1)
         dec1 = self.decoder1(dec1)
-        return torch.sigmoid(self.conv(dec1))
+        output = self.conv(dec1)
+        # from diagonal to sequence
+        idx_tensor = torch.arange(output.size(-1)).to(output.device)
+        output = output[:, :, idx_tensor, idx_tensor]
+        output = output.transpose(1, 2).contiguous()
+        return output
 
     @staticmethod
     def _block(in_channels, features, name):

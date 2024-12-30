@@ -48,30 +48,33 @@ date
 echo ------------------- start training ------------------------
 for CFG in 'configs/train_bert_base_conll2000pos.json' 'configs/train_roberta_base_conll2000pos.json' 'configs/train_albert_base_conll2000pos.json' 'configs/train_qwen2_1b_conll2000pos.json' 'configs/train_gemma2_2b_conll2000pos.json' 'configs/train_yi_6b_conll2000pos_ola.json';
 do
-    for LR in '1e-5' '3e-5' '1e-4';
+    for UNET_FEATURE_DIM in '64' '128' '256'; 
     do
-        while true
+        for LR in '1e-5' '3e-5' '1e-4' '3e-4' '1e-3' '3e-3' '1e-2' '3e-2';
         do
-            gpu_monitor
-            have_free_gpu=$?
-            if [ $have_free_gpu -eq 1 ]
-            then
-                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_lr_${LR}.log
-                {
-                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR >> $LOG_FILE 2>&1
-                } &
-                training_pid=$!
-                for used_gpu in "${FREE_GPUS[@]}"; do
-                    for ((idx=0; idx<${#GPU_LIST[@]}; idx++)); do
-                        if [ "${GPU_LIST[$idx]}" == "$used_gpu" ]; then
-                            PID_LIST[$idx]=$training_pid
-                        fi
+            while true
+            do
+                gpu_monitor
+                have_free_gpu=$?
+                if [ $have_free_gpu -eq 1 ]
+                then
+                    LOG_FILE=outputs/logs/CFG_${CFG:8:20}_lr_${LR}.log
+                    {
+                        CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR --adapter_architecture tokencls_unet --num_train_epochs 150 --per_device_train_batch_size 256 --unet_init_features $UNET_FEATURE_DIM >> $LOG_FILE 2>&1
+                    } &
+                    training_pid=$!
+                    for used_gpu in "${FREE_GPUS[@]}"; do
+                        for ((idx=0; idx<${#GPU_LIST[@]}; idx++)); do
+                            if [ "${GPU_LIST[$idx]}" == "$used_gpu" ]; then
+                                PID_LIST[$idx]=$training_pid
+                            fi
+                        done
                     done
-                done
-                echo CUDA_DEVICES_$(IFS=,; echo "${FREE_GPUS[*]}")_CFG_${CFG:8:20}_PID:${training_pid}_LOG:$LOG_FILE
-                sleep 2s
-                break
-            fi
+                    echo CUDA_DEVICES_$(IFS=,; echo "${FREE_GPUS[*]}")_CFG_${CFG:8:20}_PID:${training_pid}_LOG:$LOG_FILE
+                    sleep 2s
+                    break
+                fi
+            done
         done
     done
 done

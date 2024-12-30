@@ -76,13 +76,15 @@ def main():
     set_seed(training_args.seed)
 
     # create data manager
+    pad_to_multiple_of = data_args.pad_to_multiple_of if model_args.adapter_architecture != "tokencls_unet" else 32
     data_manager = DataManager(
         dataset_name=data_args.dataset_name,
         cutoff_len=data_args.cutoff_len,
         train_model_name_or_paths=model_args.train_models_name_list,
         test_model_name_or_paths=model_args.eval_models_name_list,
         use_generated_oladata=data_args.use_generated_oladata,
-        attn_type=data_args.attn_type
+        attn_type=data_args.attn_type,
+        pad_to_multiple_of=pad_to_multiple_of
     )
 
     if data_args.othertest_dataset_name != None:
@@ -112,7 +114,8 @@ def main():
             local_files_only=model_args.local_files_only,
             abandom_base_lm=data_args.use_generated_oladata,
             ola_augments=model_args.ola_augments,
-            attn_type=data_args.attn_type
+            attn_type=data_args.attn_type,
+            **model_args.adapter_params
         )
         model.print_trainable_parameters()
         model = model.train().cuda()
@@ -215,6 +218,7 @@ def main():
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
                 attn_type=data_args.attn_type,
                 abandom_base_lm=data_args.use_generated_oladata,
+                **eval_args.get("adapter_params", {})
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),

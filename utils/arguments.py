@@ -33,6 +33,24 @@ class ModelArguments:
             "help": "The architecture of the adapter to use."
         },
     )
+    unet_init_features: int = field(
+        default=64,
+        metadata={
+            "help": "The initial number of features in the UNet."
+        },
+    )
+    axial_tf_layers: int = field(
+        default=None,
+        metadata={
+            "help": "The number of layers in the axial transformer."
+        },
+    )
+    adapter_params: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": "The parameters for the adapter."
+        },
+    )
     config_name: Optional[str] = field(
         default=None,
         metadata={
@@ -77,6 +95,12 @@ class ModelArguments:
     )
 
     def __post_init__(self):
+        # init adapter parameters
+        self.adapter_params = {}
+        if self.unet_init_features is not None:
+            self.adapter_params["unet_init_features"] = self.unet_init_features
+        if self.axial_tf_layers is not None:
+            self.adapter_params["axial_tf_layers"] = self.axial_tf_layers
         if len(self.eval_models_name_list) == 0:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
@@ -140,6 +164,10 @@ class DataArguments:
     cutoff_len: int = field(
         default=320,
         metadata={"help": "The maximum length of the input sequence."},
+    )
+    pad_to_multiple_of: int = field(
+        default=16,
+        metadata={"help": "The multiple to pad the sequence length to."},
     )
     visual_text_file: Optional[str] = field(
         default="datasets/visualize/all_text.txt",
