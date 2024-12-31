@@ -5,7 +5,6 @@ import sys
 import json
 
 import torch
-from torch.utils.data import DataLoader
 from transformers import (
     set_seed,
     HfArgumentParser,
@@ -14,12 +13,9 @@ from transformers import (
 from utils import (
     ADAPTERS_CKPT_NAME,
     save_arguments,
-    evaluate_ola_adapter,
+    evaluate_ola_adapter_with_multi_llms,
     visualize_attn_map,
     visualize_layer_attn_map,
-    TextClsMetric,
-    TokenClsMetric,
-    EntityMetric,
     ModelArguments, 
     DataArguments, 
     OLALMTrainingArguments as TrainingArguments,
@@ -89,13 +85,13 @@ def main():
 
     if data_args.othertest_dataset_name != None:
         _data_manager = DataManager(
-        dataset_name=data_args.othertest_dataset_name,
-        cutoff_len=data_args.cutoff_len,
-        train_model_name_or_paths=model_args.train_models_name_list,
-        test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata,
-        attn_type=data_args.attn_type
-    )
+            dataset_name=data_args.othertest_dataset_name,
+            cutoff_len=data_args.cutoff_len,
+            train_model_name_or_paths=model_args.train_models_name_list,
+            test_model_name_or_paths=model_args.eval_models_name_list,
+            use_generated_oladata=data_args.use_generated_oladata,
+            attn_type=data_args.attn_type
+        )
 
     # do train
     if training_args.do_train:
@@ -123,7 +119,17 @@ def main():
         train_dataset, data_collator = data_manager.get_dataset_collator(
             model_args.train_models_name_list, "train", training_args.task
         )
+        # prepare args for eval during checkpointing
+        args_for_eval = [
+            model_args.eval_models_name_list,
+            data_manager,
+            training_args.task,
+            data_args.attn_type,
+            data_args.use_generated_oladata
+        ]
+        # create trainer
         trainer = OLALMTrainer(
+            *args_for_eval,
             model=model,
             train_dataset=train_dataset,
             data_collator=data_collator,
@@ -142,8 +148,6 @@ def main():
 
     # do eval
     if training_args.do_eval:
-        if data_args.othertest_dataset_name != None:
-            data_manager = _data_manager
         # load eval adapter checkpoint
         if model_args.eval_adapter_checkpoint is None:
             eval_adapter_checkpoint = os.path.join(
@@ -158,83 +162,20 @@ def main():
         )
         with open(eval_args, "r") as f:
             eval_args = json.load(f)
-        # evaluate each model
-        for eval_model_name in model_args.eval_models_name_list:
-            print(f"Evaluating model {eval_model_name}")
-            # load eval dataset
-            eval_dataset, data_collator = data_manager.get_dataset_collator(
-                [eval_model_name], "test", task=training_args.task
-            )
-            eval_dataloader = DataLoader(
-                eval_dataset,
-                collate_fn=data_collator,
-                batch_size=training_args.per_device_eval_batch_size,
-                shuffle=False,
-            )
-            # load eval metric
-            if data_args.dataset_name.lower() == "imdb":
-                eval_metric = TextClsMetric()
-            elif data_args.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos", "conll2012cn_pos"]:
-                if hasattr(eval_dataset.datasets[0], "features"):
-                    try:
-                        label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
-                    except:
-                        label_names = eval_dataset.datasets[0].features["pos_tags_names"]
-                    label_names.append("[None]")
-                elif hasattr(eval_dataset.datasets[0], "pos_tags_names"):
-                    label_names = eval_dataset.datasets[0].pos_tags_names
-                    label_names.append("[None]")
-                else:
-                    label_names = [str(i) for i in range(eval_args["num_classes"])]
-                eval_metric = TokenClsMetric(
-                    label_names=label_names,
-                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
-                )
-            elif data_args.dataset_name.lower() == "conll2000_chunk":
-                eval_metric = TokenClsMetric(
-                    label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
-                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
-                )
-            elif data_args.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
-                if hasattr(eval_dataset.datasets[0], "features"):
-                    eval_metric = EntityMetric(
-                        label_names=eval_dataset.datasets[0].features["named_entities_names"],
-                        tokenizer=data_manager.tokenizer_dict[eval_model_name],
-                    )
-                else:
-                    eval_metric = EntityMetric(
-                        label_names=eval_dataset.datasets[0].named_entities_names,
-                        tokenizer=data_manager.tokenizer_dict[eval_model_name],
-                    )
-            else:
-                raise NotImplemented
-            # create OLAModel
-            model = OLAModel(
-                base_model_name_list=[eval_model_name,],
-                adapter_architecture=eval_args["adapter_architecture"],
-                num_classes=eval_args["num_classes"],
-                use_orders=eval_args["use_orders"],
-                remove_outliers=eval_args["remove_outliers"],
-                outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
-                attn_type=data_args.attn_type,
-                abandom_base_lm=data_args.use_generated_oladata,
-                **eval_args.get("adapter_params", {})
-            )
-            output_dir = os.path.join(
-                os.path.dirname(eval_adapter_checkpoint),
-                f"eval_{os.path.basename(eval_model_name)}"
-            )
-            # evaluate
-            evaluate_ola_adapter(
-                eval_dataloader=eval_dataloader,
-                eval_metric=eval_metric,
-                eval_ola_model=model,
-                eval_adapter_ckpt=eval_adapter_checkpoint,
-                output_dir=output_dir,
-            )
-            # Explicitly delete the model and clear cache
-            del model
-            torch.cuda.empty_cache()
+        # set output dir
+        output_dir = os.path.dirname(eval_adapter_checkpoint)
+        # evaluate
+        evaluate_ola_adapter_with_multi_llms(
+            model_args.eval_models_name_list,
+            eval_args,
+            output_dir,
+            data_manager,
+            training_args.task,
+            training_args.per_device_eval_batch_size,
+            data_args.attn_type,
+            data_args.use_generated_oladata,
+            eval_adapter_checkpoint
+        )
 
     # do visualize
     if training_args.do_visualize:

@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 from models import OLAModel
 from utils.visualize import draw_attn_heatmap
+from data_utils import DataManager
 
 
 @dataclass
@@ -206,12 +207,13 @@ def evaluate_ola_adapter(
     eval_dataloader: DataLoader,
     eval_metric: TextClsMetric,
     eval_ola_model: OLAModel, 
-    eval_adapter_ckpt: int,
     output_dir: str,
+    eval_adapter_ckpt: Optional[int] = None,
 ):
     # load the adapter checkpoint
     model = eval_ola_model.eval().cuda()
-    model.load_adapter(eval_adapter_ckpt)
+    if eval_adapter_ckpt is not None:
+        model.load_adapter(eval_adapter_ckpt)
     # do evaluation
     interested_keys = inspect.signature(model.forward).parameters.keys()
     bar = tqdm(eval_dataloader, desc="Evaluating")
@@ -233,7 +235,103 @@ def evaluate_ola_adapter(
             json.dump(eval_metric.positive_samples, f, indent=4)
         with open(os.path.join(output_dir, f"negative_results.json"), "w") as f:
             json.dump(eval_metric.negative_samples, f, indent=4)
-        if hasattr(eval_metric, "write_confusion_matrix") and callable(getattr(eval_metric, "write_confusion_matrix")):
-            eval_metric.write_confusion_matrix(os.path.join(output_dir, "confusion_matrix.csv"),
-                                               os.path.join(output_dir, "confusion_matrix.png"))
+        # if hasattr(eval_metric, "write_confusion_matrix") and callable(getattr(eval_metric, "write_confusion_matrix")):
+        #     eval_metric.write_confusion_matrix(os.path.join(output_dir, "confusion_matrix.csv"),
+        #                                        os.path.join(output_dir, "confusion_matrix.png"))
     print(f"{eval_metric.metric_string()}\nResults are saved to {output_dir}")
+
+
+def evaluate_ola_adapter_with_multi_llms(
+    eval_models_name_list: List[str],
+    eval_args: Dict,
+    output_dir: str,
+    data_manager: DataManager,
+    task: str,
+    batch_size: int,
+    attn_type: str,
+    use_generated_oladata: bool,
+    eval_adapter_checkpoint: Optional[str] = None,
+    model: Optional[OLAModel] = None,
+):
+    assert int(eval_adapter_checkpoint is not None) + int(model is not None) == 1, \
+        "Only one of eval_adapter_checkpoint and model can be set."
+    # evaluate each model
+    for eval_model_name in eval_models_name_list:
+        print(f"Evaluating model {eval_model_name}")
+        # load eval dataset
+        eval_dataset, data_collator = data_manager.get_dataset_collator(
+            [eval_model_name], "test", task=task
+        )
+        eval_dataloader = DataLoader(
+            eval_dataset,
+            collate_fn=data_collator,
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        # load eval metric
+        if data_manager.dataset_name.lower() == "imdb":
+            eval_metric = TextClsMetric()
+        elif data_manager.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos", "conll2012cn_pos"]:
+            if hasattr(eval_dataset.datasets[0], "features"):
+                try:
+                    label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
+                except:
+                    label_names = eval_dataset.datasets[0].features["pos_tags_names"]
+                label_names.append("[None]")
+            elif hasattr(eval_dataset.datasets[0], "pos_tags_names"):
+                label_names = eval_dataset.datasets[0].pos_tags_names
+                label_names.append("[None]")
+            else:
+                label_names = [str(i) for i in range(eval_args["num_classes"])]
+            eval_metric = TokenClsMetric(
+                label_names=label_names,
+                tokenizer=data_manager.tokenizer_dict[eval_model_name],
+            )
+        elif data_manager.dataset_name.lower() == "conll2000_chunk":
+            eval_metric = TokenClsMetric(
+                label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
+                tokenizer=data_manager.tokenizer_dict[eval_model_name],
+            )
+        elif data_manager.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
+            if hasattr(eval_dataset.datasets[0], "features"):
+                eval_metric = EntityMetric(
+                    label_names=eval_dataset.datasets[0].features["named_entities_names"],
+                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
+                )
+            else:
+                eval_metric = EntityMetric(
+                    label_names=eval_dataset.datasets[0].named_entities_names,
+                    tokenizer=data_manager.tokenizer_dict[eval_model_name],
+                )
+        else:
+            raise NotImplemented
+        # create OLAModel
+        if eval_adapter_checkpoint is not None:
+            model = OLAModel(
+                base_model_name_list=[eval_model_name,],
+                adapter_architecture=eval_args["adapter_architecture"],
+                num_classes=eval_args["num_classes"],
+                use_orders=eval_args["use_orders"],
+                remove_outliers=eval_args["remove_outliers"],
+                outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
+                attn_type=attn_type,
+                abandom_base_lm=use_generated_oladata,
+                **eval_args.get("adapter_params", {})
+            )
+        # set output_dir
+        tmp_output_dir = os.path.join(
+            output_dir, 
+            f"eval_{os.path.basename(eval_model_name)}"
+        )
+        # evaluate
+        evaluate_ola_adapter(
+            eval_dataloader=eval_dataloader,
+            eval_metric=eval_metric,
+            eval_ola_model=model,
+            eval_adapter_ckpt=eval_adapter_checkpoint,
+            output_dir=tmp_output_dir,
+        )
+        # Explicitly delete the model and clear cache
+        if eval_adapter_checkpoint is not None:
+            del model
+            torch.cuda.empty_cache()

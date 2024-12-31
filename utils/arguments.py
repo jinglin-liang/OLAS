@@ -231,6 +231,10 @@ class OLALMTrainingArguments(TrainingArguments):
             "help": "The output directory where the model predictions and checkpoints will be written."
         },
     )
+    eval_during_checkpointing: bool = field(
+        default=True,
+        metadata={"help": "Whether to run evaluation during checkpointing."},
+    )
     do_visualize: bool = field(
         default=False,
         metadata={"help": "Whether to visualize the attention maps."},
