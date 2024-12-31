@@ -129,7 +129,7 @@ class TokenClsMetric(TextClsMetric):
             plt.clf()
 
 
-class EntityMetric(TokenClsMetric):
+class MultiTokenMetric(TokenClsMetric):
     total_tokens_num: int = 0
     correct_tokens_num: int = 0
     total_p: int = 0
@@ -157,8 +157,8 @@ class EntityMetric(TokenClsMetric):
         self.accuracy = self.correct_tokens_num / self.total_tokens_num
         self.line_level_accuracy = self.correct_num / self.samples_num
 
-        preds_entities = self.find_entities(preds)
-        labels_entities = self.find_entities(labels)
+        preds_entities = self.find_targets(preds)
+        labels_entities = self.find_targets(labels)
         self.total_p += len(preds_entities)
         for p_en in preds_entities:
             if p_en in labels_entities:
@@ -188,7 +188,7 @@ class EntityMetric(TokenClsMetric):
                 else:
                     self.negative_samples.append(sample)
 
-    def find_entities(self, t):
+    def find_targets(self, t):
         entities = []
         t = t.view(-1)
         pos = torch.where(t % 2 != 0)[0]

@@ -1,5 +1,6 @@
 import functools
 from typing import List, Dict, Any
+import json
 
 import torch
 from torch.utils.data import ConcatDataset
@@ -17,6 +18,7 @@ from data_utils.ola_dataset import (
     get_oladata_dir_path,
     OLADataset,
     OLADataset_conll2012,
+    ClassifyDataset
 )
 
 
@@ -81,7 +83,8 @@ class DataManager:
         test_model_name_or_paths: List[str],
         use_generated_oladata: bool = False,
         attn_type: str = "ola",
-        pad_to_multiple_of: int = 8
+        pad_to_multiple_of: int = 8,
+        do_classify_data_generate: bool = False
     ) -> None:
         self.dataset_name = dataset_name
         self.cutoff_len = cutoff_len
@@ -102,6 +105,7 @@ class DataManager:
             "train": {},
             "test": {},
         }
+
         kwargs = {}
         kwargs["cutoff_len"] = self.cutoff_len
         if dataset_name in ["conll2000_pos", "conll2000_chunk"]:
@@ -110,12 +114,41 @@ class DataManager:
         if dataset_name in ["conll2012cn_pos", "conll2012cn_entity", "conll2012en_pos", "conll2012en_entity"]:
             kwargs["pos_tags_names"] = raw_train_data.features['sentences'][0]['pos_tags'].feature.names
             kwargs["named_entities_names"] = raw_train_data.features['sentences'][0]['named_entities'].feature.names
+        
+        if do_classify_data_generate:
+            use_generated_classify_data = True
+            assert dataset_name == "conll2012en_entity"
+            if use_generated_classify_data:
+                with open('classify_sentences.json', 'r') as f:
+                    final_sentences = json.load(f)
+            else:
+                final_sentences = []
+                final_sentence_len = 100
+                for document_id in range(raw_train_data.__len__()):
+                    tmp_doc_words = []
+                    for sentence_id in range(len(raw_train_data[document_id]['sentences'])):
+                        tmp_doc_words.extend(raw_train_data[document_id]['sentences'][sentence_id]['words'])
+                        if len(tmp_doc_words) >= final_sentence_len:
+                            final_sentences.append(tmp_doc_words[:final_sentence_len])
+                            tmp_doc_words = []
+                        if len(final_sentences) >= 1000:
+                            break
+                final_sentences = final_sentences[:1000]
+                print("final sentence num =", len(final_sentences))
+                with open('classify_sentences.json', 'w') as f:
+                    json.dump(final_sentences, f)
+
         for tmp_train_model in train_model_name_or_paths:
             if self.use_generated_oladata:
                 data_dir_path = get_oladata_dir_path(
-                    dataset_name, tmp_train_model, "train", attn_type
+                    dataset_name, tmp_train_model, "train", attn_type, do_classify_data_generate
                 )
                 self.data["train"][tmp_train_model] = OLADataset(data_dir_path)
+            elif do_classify_data_generate:
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                kwargs["language"] = "en"
+                kwargs["task"] = dataset_name.split("_")[-1]
+                self.data["train"][tmp_train_model] = ClassifyDataset(final_sentences, **kwargs)
             elif dataset_name in ["conll2012cn_pos", "conll2012cn_entity"]:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 kwargs["language"] = "cn"
@@ -137,11 +170,13 @@ class DataManager:
                 self.data["train"][tmp_train_model] = raw_train_data.map(preprocess_func)
         
         for tmp_test_model in test_model_name_or_paths:
-            if self.use_generated_oladata:
+            if self.use_generated_oladata and not do_classify_data_generate:
                 data_dir_path = get_oladata_dir_path(
                     dataset_name, tmp_test_model, "test", attn_type
                 )
                 self.data["test"][tmp_test_model] = OLADataset(data_dir_path)
+            elif do_classify_data_generate:
+                self.data["test"][tmp_test_model] = None
             elif dataset_name in ["conll2012cn_pos","conll2012cn_entity"]:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 kwargs["language"] = "cn"

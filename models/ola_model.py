@@ -71,6 +71,8 @@ class OLAModel(nn.Module):
         base_model_name_list: List[str],
         adapter_architecture: str,
         num_classes: int,
+        adapter_hidden_size: int = 768,
+        num_layers: int = 5,
         use_orders: List[int] = [1, 2, 3],
         remove_outliers: bool = False,
         local_files_only: bool = True,

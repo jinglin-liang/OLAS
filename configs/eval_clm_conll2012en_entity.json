@@ -1,23 +1,19 @@
 {
     "train_models_name_list": [
+        "pretrained_models/Qwen2-1.5B-Instruct"
+    ],
+    "eval_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
         "pretrained_models/Qwen2-7B-Instruct",
         "pretrained_models/gemma-2-2b-it",
         "pretrained_models/gemma-2-9b-it",
-        "pretrained_models/bloomz-3b",
-        "pretrained_models/bloomz-7b1",
-        "pretrained_models/Yi-1.5-6B-Chat",
-        "pretrained_models/Yi-1.5-9B-Chat"
+        "pretrained_models/Yi-1.5-6B-Chat"
     ],
     "dataset_name": "conll2012en_entity",
+    "task": "entity",
     "cutoff_len": 64,
     "do_train": false,
-    "do_eval": false,
-    "do_visualize": false,
-    "do_gen_save_ola": true,
-    "use_orders": [
-        1,
-        2,
-        3
-    ]
+    "do_eval": true,
+    "per_device_eval_batch_size": 2,
+    "eval_adapter_checkpoint": "outputs/20241225_085212/checkpoint-last/ola_adapter_weight.bin"
 }

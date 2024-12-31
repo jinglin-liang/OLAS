@@ -12,7 +12,7 @@ from .evaluate import (
     evaluate_ola_adapter_with_multi_llms,
     TextClsMetric,
     TokenClsMetric,
-    EntityMetric
+    MultiTokenMetric
 )
 from .visualize import (
     visualize_attn_map,
