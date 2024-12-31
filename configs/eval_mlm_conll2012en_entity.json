@@ -9,7 +9,7 @@
     "task": "entity",
     "cutoff_len": 64,
     "do_train": false,
-    "do_eval": true,
+    "do_eval": false,
     "per_device_eval_batch_size": 8,
     "eval_adapter_checkpoint": "outputs/20241223_161519/checkpoint-last/ola_adapter_weight.bin",
     "attn_type": "ola"

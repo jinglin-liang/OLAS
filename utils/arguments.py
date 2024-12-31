@@ -40,9 +40,21 @@ class ModelArguments:
         },
     )
     axial_tf_layers: int = field(
-        default=None,
+        default=5,
         metadata={
             "help": "The number of layers in the axial transformer."
+        },
+    )
+    rnn_layers: int = field(
+        default=1,
+        metadata={
+            "help": "The number of layers in the rnn."
+        },
+    )
+    adapter_hidden_size: int = field(
+        default=768,
+        metadata={
+            "help": "The hidden size of the transformer."
         },
     )
     adapter_params: Optional[dict] = field(
@@ -73,14 +85,6 @@ class ModelArguments:
         default_factory=lambda: [1, 2, 3],
         metadata={"help": "The orders of attention maps to use."},
     )
-    adapter_hidden_size: int = field(
-        default=768,
-        metadata={"help": "The hidden size of adapter."},
-    )
-    num_layers: int = field(
-        default=5,
-        metadata={"help": "The layer number of adapter."},
-    )
     remove_outliers: bool = field(
         default=True,
         metadata={"help": "Whether to remove outliers from attention maps."},
@@ -109,6 +113,10 @@ class ModelArguments:
             self.adapter_params["unet_init_features"] = self.unet_init_features
         if self.axial_tf_layers is not None:
             self.adapter_params["axial_tf_layers"] = self.axial_tf_layers
+        if self.rnn_layers is not None:
+            self.adapter_params["rnn_layers"] = self.rnn_layers
+        if self.adapter_hidden_size is not None:
+            self.adapter_params["hidden_size"] = self.adapter_hidden_size
         if len(self.eval_models_name_list) == 0:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
