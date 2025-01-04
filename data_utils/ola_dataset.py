@@ -226,7 +226,6 @@ class ClassifyDataset:
     def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names, named_entities_names, language, task):
         # self.pos_tags_names = pos_tags_names
         # self.named_entities_names = named_entities_names
-        cutoff_len = 100
         self.data = []
         id = -1
         for sentence in sentences:

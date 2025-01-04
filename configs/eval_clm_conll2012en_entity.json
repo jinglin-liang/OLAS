@@ -1,6 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct"
+        "pretrained_models/Yi-1.5-9B-Chat"
     ],
     "eval_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
@@ -15,5 +15,5 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/20241225_085212/checkpoint-last/ola_adapter_weight.bin"
+    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_yi-9b_nl3_rh_gs/checkpoint-last/ola_adapter_weight.bin"
 }
