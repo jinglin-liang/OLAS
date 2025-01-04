@@ -56,7 +56,7 @@ do
             have_free_gpu=$?
             if [ $have_free_gpu -eq 1 ]
             then
-                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_ep_${EP}.log
+                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_nl_${NL}.log
                 {
                     CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --num_train_epochs $EP --use_generated_oladata true >> $LOG_FILE 2>&1
                 } &

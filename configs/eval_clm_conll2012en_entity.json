@@ -3,10 +3,8 @@
         "pretrained_models/Yi-1.5-9B-Chat"
     ],
     "eval_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct",
         "pretrained_models/Qwen2-7B-Instruct",
         "pretrained_models/gemma-2-2b-it",
-        "pretrained_models/gemma-2-9b-it",
         "pretrained_models/Yi-1.5-6B-Chat"
     ],
     "dataset_name": "conll2012en_entity",

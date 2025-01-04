@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from dataclasses import asdict
 import os
 import json
@@ -11,6 +11,9 @@ from transformers.utils import logging, SAFE_WEIGHTS_NAME
 import safetensors
 
 from models import OLAModel
+from data_utils import DataManager
+from utils.arguments import OLALMTrainingArguments
+from utils.evaluate import evaluate_ola_adapter_with_multi_llms
 
 
 logger = logging.get_logger(__name__)
@@ -19,6 +22,24 @@ TRAINING_ARGS_JSON = "training_args.json"
 
 
 class OLALMTrainer(Trainer):
+    def __init__(
+        self, 
+        eval_models_name_list: List[str],
+        data_manager: DataManager,
+        task: str,
+        attn_type: str,
+        use_generated_oladata: bool,
+        *args, 
+        **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.eval_models_name_list = eval_models_name_list
+        self.data_manager = data_manager
+        self.task = task
+        self.attn_type = attn_type
+        self.use_generated_oladata = use_generated_oladata
+        self.args: OLALMTrainingArguments
+
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -61,3 +82,26 @@ class OLALMTrainer(Trainer):
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
         with open(os.path.join(output_dir, TRAINING_ARGS_JSON), "w") as json_file:
             json.dump(asdict(self.args), json_file, indent=4)
+
+        # evaluate during checkpointing
+        if self.args.eval_during_checkpointing and self.use_generated_oladata:
+            # set model to eval mode
+            self.model.eval()
+            # load arguments
+            eval_args = os.path.join(output_dir, "..", "args.json")
+            with open(eval_args, "r") as f:
+                eval_args = json.load(f)
+            # evaluate
+            evaluate_ola_adapter_with_multi_llms(
+                self.eval_models_name_list,
+                eval_args,
+                output_dir,
+                self.data_manager,
+                self.task,
+                self.args.per_device_eval_batch_size,
+                self.attn_type,
+                self.use_generated_oladata,
+                model=self.model
+            )
+            # set model to train mode
+            self.model.train()

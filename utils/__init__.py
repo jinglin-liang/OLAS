@@ -9,7 +9,7 @@ from .trainer import (
     ADAPTERS_CKPT_NAME,
 )
 from .evaluate import (
-    evaluate_ola_adapter,
+    evaluate_ola_adapter_with_multi_llms,
     TextClsMetric,
     TokenClsMetric,
     MultiTokenMetric
@@ -17,4 +17,7 @@ from .evaluate import (
 from .visualize import (
     visualize_attn_map,
     visualize_layer_attn_map
+)
+from .contributions import (
+    ModelWrapper
 )
