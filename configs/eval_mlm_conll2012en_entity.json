@@ -1,9 +1,13 @@
 {
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/electra-large-generator"
     ],
     "eval_models_name_list": [
-        "pretrained_models/albert-large-v2"
+        "pretrained_models/bert-base-cased",
+        "pretrained_models/bert-large-cased",
+        "pretrained_models/roberta-base",
+        "pretrained_models/roberta-large",
+        "pretrained_models/electra-base-generator"
     ],
     "dataset_name": "conll2012en_entity",
     "task": "entity",
@@ -11,6 +15,6 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 8,
-    "eval_adapter_checkpoint": "outputs/20241223_161519/checkpoint-last/ola_adapter_weight.bin",
+    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_electra-large_nl3_rt_rh_gs/checkpoint-last/ola_adapter_weight.bin",
     "attn_type": "ola"
 }

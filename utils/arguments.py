@@ -89,6 +89,14 @@ class ModelArguments:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
             self.ola_augments = [
+                # {
+                #     "class_name": "RandomTemperatureScaling",
+                #     "params": {
+                #         "p": 0.2,
+                #         "min_temp": 0.6,
+                #         "max_temp": 3
+                #     }
+                # },
                 {
                     "class_name": "RandomHightlightColumns",
                     "params": {
@@ -112,18 +120,10 @@ class ModelArguments:
                 {
                     "class_name": "AddGuassianNoise",
                     "params": {
-                        "p": 0.15,
-                        "std_ratio": 0.13
+                        "p": 0.3,
+                        "std_ratio": 0.2
                     }
                 },
-                # {
-                #     "class_name": "RandomTemperatureScaling",
-                #     "params": {
-                #         "p": 0.2,
-                #         "min_temp": 0.6,
-                #         "max_temp": 3
-                #     }
-                # }
             ]
 
 

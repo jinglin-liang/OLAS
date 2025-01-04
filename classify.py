@@ -6,6 +6,15 @@ from tqdm import tqdm
 import numpy as np
 import random
 
+import lmdb, pickle
+from models.ola_utils import cal_maskes
+from models.ola_model import preprocess_ola
+from models.ola_augmentations import (
+    RandomHightlightColumns,
+    AddGuassianNoise,
+    RandomTemperatureScaling
+)
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -13,8 +22,6 @@ import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from transformers import set_seed
-
-from utils import DataIter
 
 from convs.cifar_resnet import resnet32
 from convs.resnet import resnet18, resnet34, resnet50
@@ -161,43 +168,108 @@ class BaseNet(nn.Module):
         self.eval()
 
         return self
-
-class mydataset(Dataset):
-    def __init__(self, model_names, selected_orders, cut_len=200, transform=None, reverse=False):
-        self.data = []
-        for model_name in model_names:
-            data_path = f'map_datas/remove_outliers/ro_maps_{model_name}.json'
-            with open(data_path, 'r', encoding='utf-8') as file:
-                tmp_data = json.load(file)
-                tmp_data = tmp_data[:cut_len]
-                for data in tmp_data:
-                    data['attn_map'] = torch.tensor(data['attn_map'])[selected_orders].tolist()
-                self.data.extend(tmp_data)
-        if transform == None:
-            self.transform = transforms.Compose([
-                # transforms.ToTensor(),
-                transforms.Resize((20, 20)),
-                # transforms.Normalize(mean=[0.485], std=[0.229]),
-            ])
-        else:
-            self.transform = transform
-        self.reverse = reverse
     
-    def __getitem__(self, index):
-        data = self.data[index]
-
-        if self.reverse:
-            data['attn_map'] = torch.tensor(data['attn_map'][0])
-            mask = torch.ones_like(data['attn_map']) - (torch.eye(data['attn_map'].shape[-1]).unsqueeze(0) * 0.5)
-            data['attn_map'] = (data['attn_map'] + data['attn_map'].transpose(1, 2)) * mask
-            data['attn_map'] = self.transform(np.array(data['attn_map'][0])).float()
-        else:
-            data['attn_map'] = self.transform(torch.tensor(data['attn_map'])).float()
-        
+class DataIter(object):
+    def __init__(self, dataloader):
+        self.dataloader = dataloader
+        self._iter = iter(self.dataloader)
+    
+    def next(self):
+        try:
+            data = next( self._iter )
+        except StopIteration:
+            self._iter = iter(self.dataloader)
+            data = next( self._iter )
         return data
 
+class ClassifyDataset(Dataset):
+    def __init__(self, data_dirs, selected_orders, is_casual=True, use_augment=True):
+        self.len = 0
+        self.data = []
+        self.remove_outliers = True
+        self.outliers_sigma_multiplier = 3.0
+        self.is_casual = is_casual
+        self._init_ola_augmentation(use_augment)
+        self.transform = transforms.Compose([
+            transforms.Resize(size=(100, 100), antialias=True)
+        ])
+
+        for data_dir in data_dirs:
+            self.env = lmdb.open(data_dir, max_readers=8, readonly=True, lock=False, readahead=True, meminit=True)
+            with self.env.begin(write=False) as txn:
+                self.num_samples = int(txn.get('num_samples'.encode('utf-8')).decode("utf-8"))
+                self.len += self.num_samples
+                for idx in range(self.num_samples):
+                    data_id = str(idx).encode("utf-8")
+                    data_byte = txn.get(data_id)
+                    data = pickle.loads(data_byte)
+                    tmp_attn_map = {k: attn for k, attn in data['ola'].items() if k in selected_orders}
+                    self.data.append({'id': data['id'], 'attn_map': tmp_attn_map, 'attention_mask': data['attention_mask'], 'model': data_dir[42:-6]})
+
     def __len__(self):
-        return len(self.data)
+        return self.len
+
+    def __getitem__(self, idx):
+        attn = self.data[idx]['attn_map']
+        attention_mask = torch.tensor(self.data[idx]['attention_mask']).unsqueeze(0)
+        # calculate maskes from ola
+        attn_mask = cal_maskes(
+            attn, attention_mask, 
+            is_casual=self.is_casual, 
+            sigma_multiplier=self.outliers_sigma_multiplier
+        )
+        # augments ola
+        if self.ola_augments is not None:
+            for tmp_aug in self.ola_augments:
+                attn, _ = tmp_aug(attn, attn_mask)
+                attn_mask = cal_maskes(
+                    attn, attention_mask, 
+                    is_casual=self.is_casual, 
+                    sigma_multiplier=self.outliers_sigma_multiplier
+                )
+        # preprocess ola
+        stack_attn_tensor = preprocess_ola(
+            attn, attn_mask, 
+            remove_outliers=self.remove_outliers, 
+            is_casual=self.is_casual,
+            origin=False
+        )
+        stack_attn_tensor = self.transform(stack_attn_tensor)[0]
+        return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model']}
+    
+    def _init_ola_augmentation(self, use_augment):
+        if use_augment:
+            ola_augments = [
+                        {
+                            "class_name": "RandomHightlightColumns",
+                            "params": {
+                                "p": 0.3,
+                                "min_columns": 1,
+                                "max_columns": 3,
+                                "ref_rank1": 0,
+                                "ref_rank2": 1
+                            }
+                        },
+                        {
+                            "class_name": "AddGuassianNoise",
+                            "params": {
+                                "p": 0.15,
+                                "std_ratio": 0.13
+                            }
+                        },
+            ]
+        else:
+            ola_augments = None
+        if ola_augments is not None:
+            self.ola_augments = []
+            for tmp_aug in ola_augments:
+                class_name = tmp_aug["class_name"]
+                params = tmp_aug["params"]
+                self.ola_augments.append(
+                    globals()[class_name](**params)
+                )
+        else:
+            self.ola_augments = None
 
 def _compute_accuracy(model, loader, model_names):
     model.eval()
@@ -222,38 +294,21 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     cudnn.deterministic = True
-
 if __name__ == "__main__":
     setup_seed(2025)
 
-    # train_datapath = "map_datas/remove_outliers/ro_maps_small.json"
-    # test_datapath = "map_datas/remove_outliers/ro_maps_large.json"
-    train_model_names = ['qwen-1b', 'gemma-2b', 'bloomz-3b', 'yi-6b', 'opt-1b3']
-    test_model_names = ['qwen-7b', 'gemma-9b', 'bloomz-7b1', 'yi-9b', 'opt-2b7']
-    selected_orders = [2]
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Yi-1.5-6B-Chat', 6:'Yi-1.5-9B-Chat'}
+    train_model_ids = [1,2,5,6]
+    test_model_ids = [3,4]
+    train_model_names = [ams[i] for i in train_model_ids]
+    test_model_names = [ams[i] for i in test_model_ids]
+    selected_orders = [1]
     num_classes = 1500
-    train_dataset = mydataset(train_model_names, selected_orders, cut_len=num_classes)
-    test_dataset = mydataset(test_model_names, selected_orders, cut_len=num_classes)
 
-    # parser arguments
-    model_args, data_args, training_args = args_parser()
-    model_args: ModelArguments
-    data_args: DataArguments
-    training_args: TrainingArguments
-
-    # set random seed
-    set_seed(training_args.seed)
-
-    # create data manager
-    data_manager = DataManager(
-        dataset_name=data_args.dataset_name,
-        cutoff_len=data_args.cutoff_len,
-        train_model_name_or_paths=model_args.train_models_name_list,
-        test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata,
-        attn_type=data_args.attn_type,
-        do_classify_data_generate=data_args.do_classify_data_generate
-    )
+    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify/{model_name}/train' for model_name in test_model_names]
+    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=False)
+    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=False)
 
     train_dataloader = DataLoader(
         train_dataset,

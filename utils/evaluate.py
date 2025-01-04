@@ -227,8 +227,12 @@ def evaluate_ola_adapter(
     # save the results
     if len(eval_metric.all_samples) > 0:
         os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, f"all_results_acc_{eval_metric.accuracy:.4f}.json"), "w") as f:
-            json.dump(eval_metric.all_samples, f, indent=4)
+        if isinstance(eval_metric, MultiTokenMetric):
+            with open(os.path.join(output_dir, f"all_results_acc_{eval_metric.accuracy:.4f}_P_{eval_metric.precision:.4f}_R_{eval_metric.recall:.4f}_F1_{eval_metric.f1:.4f}.json"), "w") as f:
+                json.dump(eval_metric.all_samples, f, indent=4)
+        else:
+            with open(os.path.join(output_dir, f"all_results_acc_{eval_metric.accuracy:.4f}.json"), "w") as f:
+                json.dump(eval_metric.all_samples, f, indent=4)
         with open(os.path.join(output_dir, f"positive_results.json"), "w") as f:
             json.dump(eval_metric.positive_samples, f, indent=4)
         with open(os.path.join(output_dir, f"negative_results.json"), "w") as f:

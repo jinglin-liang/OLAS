@@ -18,3 +18,6 @@ from .visualize import (
     visualize_attn_map,
     visualize_layer_attn_map
 )
+from .contributions import (
+    ModelWrapper
+)

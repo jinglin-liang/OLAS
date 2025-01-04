@@ -5,8 +5,10 @@
         "pretrained_models/bert-large-cased",
         "pretrained_models/roberta-base",
         "pretrained_models/roberta-large",
-        "pretrained_models/albert-base-v2",
-        "pretrained_models/albert-large-v2"
+        "pretrained_models/electra-base-generator",
+        "pretrained_models/electra-large-generator",
+        "pretrained_models/spanbert-base-cased",
+        "pretrained_models/spanbert-large-cased"
     ],
     "do_train": false,
     "do_eval": false,

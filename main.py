@@ -218,7 +218,8 @@ def main():
                 use_orders=eval_args["use_orders"],
                 remove_outliers=eval_args["remove_outliers"],
                 outliers_sigma_multiplier=eval_args["outliers_sigma_multiplier"],
-                attn_type=data_args.attn_type
+                attn_type=data_args.attn_type,
+                abandom_base_lm=data_args.use_generated_oladata,
             )
             output_dir = os.path.join(
                 os.path.dirname(eval_adapter_checkpoint),
@@ -244,20 +245,7 @@ def main():
         with open(data_args.visual_text_file, "r") as f:
             text_list = f.readlines()
         text_list = [text.rstrip('\n') for text in text_list]
-        # visualize_attn_map(
-        #     model_args.train_models_name_list,
-        #     model_args.use_orders,
-        #     text_list,
-        #     training_args.output_dir,
-        #     model_args.ola_augments,
-        #     model_args.adapter_hidden_size,
-        #     model_args.num_layers,
-        #     data_args.cutoff_len,
-        #     model_args.outliers_sigma_multiplier,
-        #     data_args.visual_annot_size,
-        #     data_args.visual_label_size
-        # )
-        visualize_layer_attn_map(
+        visualize_attn_map(
             model_args.train_models_name_list,
             model_args.use_orders,
             text_list,
@@ -276,6 +264,8 @@ def main():
         #     text_list,
         #     training_args.output_dir,
         #     model_args.ola_augments,
+        #     model_args.adapter_hidden_size,
+        #     model_args.num_layers,
         #     data_args.cutoff_len,
         #     model_args.outliers_sigma_multiplier,
         #     data_args.visual_annot_size,

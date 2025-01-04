@@ -4,22 +4,23 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, BertModel, DebertaV2Model
 from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
-from models.ola_utils import get_order_level_attention, get_tandem_level_attention, cal_maskes
+from models.ola_utils import get_order_level_attention, get_tandem_level_attention, get_flow_attention, get_alti_attention, get_rolloutplus_attention, cal_maskes
 from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
     RandomTemperatureScaling
 )
+from utils.contributions import ModelWrapper
 
 
 def is_causal_lm(model_type: str) -> bool:
     causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2", "bloom"}
-    non_causal_models = {"bert", "roberta", "albert"}
+    non_causal_models = {"bert", "roberta", "albert", "deberta-v2", "electra"}
     if model_type.lower() in causal_models:
         return True
     elif model_type.lower() in non_causal_models:
@@ -28,13 +29,16 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 
-def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False):
+def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False, origin=True):
     stack_ola_tensor = torch.cat([v for _, v in ola.items()], dim=1)
     if remove_outliers:
         outliers_mask = ola_mask["outliers_mask"]
         outliers_mask_tensor = torch.cat([v for _, v in outliers_mask.items()], dim=1)
         stack_ola_tensor_wo_ol = stack_ola_tensor * (1 - outliers_mask_tensor)
-        stack_ola_tensor = torch.cat([stack_ola_tensor, stack_ola_tensor_wo_ol], dim=1)
+        if origin:
+            stack_ola_tensor = torch.cat([stack_ola_tensor, stack_ola_tensor_wo_ol], dim=1)
+        else:
+            stack_ola_tensor = stack_ola_tensor_wo_ol
     if regularize:
         stack_ola_tensor = stack_ola_tensor / (stack_ola_tensor.sum(dim=-1, keepdim=True) + 1e-10)
     if is_casual:
@@ -83,13 +87,13 @@ class OLAModel(nn.Module):
         **kwargs,
     ):
         super(OLAModel, self).__init__()
-        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm)
+        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm, attn_type)
         self._init_ola_adaptor(adapter_architecture, num_classes, adapter_hidden_size, num_layers,
                                use_orders, remove_outliers, outliers_sigma_multiplier, attn_type)
         self._init_learnable_params()
         self._init_ola_augmentation(ola_augments)
 
-    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm):
+    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm, attn_type):
         self.base_model_name_list = base_model_name_list
         self.all_tokenizer = {}
         is_casual_list = []
@@ -109,12 +113,27 @@ class OLAModel(nn.Module):
             self.all_tokenizer[tmp_model_name] = tmp_tokenizer
             if len(base_model_name_list) == 1 and not abandom_base_lm:
                 # load base model
-                model_class = getattr(__import__('transformers'), config.architectures[0])
-                self.base_model = model_class.from_pretrained(
-                    tmp_model_name, config=config,
-                    local_files_only=local_files_only, 
-                    attn_implementation="eager"
-                )
+                if config.model_type == 'deberta-v2':
+                    self.base_model = DebertaV2Model.from_pretrained(
+                        tmp_model_name, config=config,
+                        local_files_only=local_files_only, 
+                        attn_implementation="eager"
+                    )
+                elif config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
+                    self.base_model = BertModel.from_pretrained(
+                        tmp_model_name, config=config,
+                        local_files_only=local_files_only, 
+                        attn_implementation="eager"
+                    )
+                else:
+                    model_class = getattr(__import__('transformers'), config.architectures[0])
+                    self.base_model = model_class.from_pretrained(
+                        tmp_model_name, config=config,
+                        local_files_only=local_files_only, 
+                        attn_implementation="eager"
+                    )
+                if attn_type in ["alti", "rolloutplus"]:
+                    self.wrapped_model = ModelWrapper(self.base_model)
             else:
                 self.base_model = None
         assert all(is_casual_list) or all([not i for i in is_casual_list]), "All models should be the same type."
@@ -201,7 +220,7 @@ class OLAModel(nn.Module):
         output_tandem: Optional[bool] = False,
         **kwargs,
     ) -> Union[OLALMOutput]:
-        assert attn_type in ["ola", "tandem", "first", "last", "flow"]
+        assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti"]
         attn = ola
         # move inputs to device
         input_ids = input_ids.to(self.device)
@@ -211,15 +230,25 @@ class OLAModel(nn.Module):
         # calculate attn map
         if attn is None:
             # base model forward
-            output = self.base_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                labels=None,
-                output_attentions=True,
-                output_hidden_states=False,
-                return_dict=True
-            )
+            if self.base_model.config.model_type == 'deberta-v2' or self.base_model.config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
+                output = self.base_model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    output_attentions=True,
+                    output_hidden_states=False,
+                    return_dict=True
+                )
+            else:
+                output = self.base_model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    labels=None,
+                    output_attentions=True,
+                    output_hidden_states=False,
+                    return_dict=True
+                )
             # get order level attention
             if attn_type == "ola":
                 attn = get_order_level_attention(
@@ -232,10 +261,28 @@ class OLAModel(nn.Module):
                     output.attentions, 
                     attention_mask
                 )
+            elif attn_type == "flow":
+                attn = get_flow_attention(
+                    output.attentions, 
+                    attention_mask,
+                    input_ids
+                )
             elif attn_type == "first":
                 attn = {1:(output.attentions[0] * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1).unsqueeze(1)}
             elif attn_type == "last":
                 attn = {1:(output.attentions[-1] * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1).unsqueeze(1)}
+            elif attn_type == "rolloutplus":
+                tmp_b = {'input_ids': input_ids, 'attention_mask': attention_mask, 'position_ids': position_ids, 'labels': None}
+                hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
+                attn = get_rolloutplus_attention(
+                    attentions, contributions_data
+                )
+            elif attn_type == "alti":
+                tmp_b = {'input_ids': input_ids, 'attention_mask': attention_mask, 'position_ids': position_ids, 'labels': None}
+                hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
+                attn = get_alti_attention(
+                    attentions, contributions_data
+                )
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
