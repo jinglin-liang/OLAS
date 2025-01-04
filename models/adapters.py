@@ -11,7 +11,7 @@ class AxialTransformerAdapter(nn.Module):
         in_channels=3,
         out_channels=3,
         hidden_size=768,
-        num_layers=5,
+        axial_tf_layers=5,
         heads=8,
         reversible=True,
         **kwargs
@@ -24,7 +24,7 @@ class AxialTransformerAdapter(nn.Module):
         )
         self.transformer = AxialImageTransformer(
             dim = hidden_size,
-            depth = num_layers,
+            depth = axial_tf_layers,
             heads = heads,
             reversible = reversible
         )

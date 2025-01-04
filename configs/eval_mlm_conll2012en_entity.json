@@ -13,7 +13,7 @@
     "task": "entity",
     "cutoff_len": 64,
     "do_train": false,
-    "do_eval": false,
+    "do_eval": true,
     "per_device_eval_batch_size": 8,
     "eval_adapter_checkpoint": "outputs/-conll2012en_entity_electra-large_nl3_rt_rh_gs/checkpoint-last/ola_adapter_weight.bin",
     "attn_type": "ola"

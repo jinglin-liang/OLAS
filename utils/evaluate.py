@@ -298,18 +298,23 @@ def evaluate_ola_adapter_with_multi_llms(
             )
         elif data_manager.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
             if hasattr(eval_dataset.datasets[0], "features"):
-                eval_metric = EntityMetric(
+                eval_metric = MultiTokenMetric(
                     label_names=eval_dataset.datasets[0].features["named_entities_names"],
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
             else:
-                eval_metric = EntityMetric(
+                eval_metric = MultiTokenMetric(
                     label_names=eval_dataset.datasets[0].named_entities_names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
         else:
             raise NotImplemented
         # create OLAModel
+        if 'adapter_params' not in eval_args.keys(): # for ola checkpoints
+            eval_args['adapter_params'] = {}
+            eval_args['adapter_params']["axial_tf_layers"] = eval_args['num_layers']
+            eval_args['adapter_params']["hidden_size"] = eval_args['adapter_hidden_size']
+
         if eval_adapter_checkpoint is not None:
             model = OLAModel(
                 base_model_name_list=[eval_model_name,],
