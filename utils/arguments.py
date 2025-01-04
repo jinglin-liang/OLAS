@@ -33,6 +33,36 @@ class ModelArguments:
             "help": "The architecture of the adapter to use."
         },
     )
+    unet_init_features: int = field(
+        default=64,
+        metadata={
+            "help": "The initial number of features in the UNet."
+        },
+    )
+    axial_tf_layers: int = field(
+        default=5,
+        metadata={
+            "help": "The number of layers in the axial transformer."
+        },
+    )
+    rnn_layers: int = field(
+        default=1,
+        metadata={
+            "help": "The number of layers in the rnn."
+        },
+    )
+    adapter_hidden_size: int = field(
+        default=768,
+        metadata={
+            "help": "The hidden size of the transformer."
+        },
+    )
+    adapter_params: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": "The parameters for the adapter."
+        },
+    )
     config_name: Optional[str] = field(
         default=None,
         metadata={
@@ -54,14 +84,6 @@ class ModelArguments:
     use_orders: List[int] = field(
         default_factory=lambda: [1, 2, 3],
         metadata={"help": "The orders of attention maps to use."},
-    )
-    adapter_hidden_size: int = field(
-        default=768,
-        metadata={"help": "The hidden size of adapter."},
-    )
-    num_layers: int = field(
-        default=5,
-        metadata={"help": "The layer number of adapter."},
     )
     remove_outliers: bool = field(
         default=True,
@@ -85,6 +107,16 @@ class ModelArguments:
     )
 
     def __post_init__(self):
+        # init adapter parameters
+        self.adapter_params = {}
+        if self.unet_init_features is not None:
+            self.adapter_params["unet_init_features"] = self.unet_init_features
+        if self.axial_tf_layers is not None:
+            self.adapter_params["axial_tf_layers"] = self.axial_tf_layers
+        if self.rnn_layers is not None:
+            self.adapter_params["rnn_layers"] = self.rnn_layers
+        if self.adapter_hidden_size is not None:
+            self.adapter_params["hidden_size"] = self.adapter_hidden_size
         if len(self.eval_models_name_list) == 0:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
@@ -148,6 +180,10 @@ class DataArguments:
     cutoff_len: int = field(
         default=320,
         metadata={"help": "The maximum length of the input sequence."},
+    )
+    pad_to_multiple_of: int = field(
+        default=16,
+        metadata={"help": "The multiple to pad the sequence length to."},
     )
     visual_text_file: Optional[str] = field(
         default="datasets/visualize/all_text.txt",
@@ -214,6 +250,10 @@ class OLALMTrainingArguments(TrainingArguments):
         metadata={
             "help": "The output directory where the model predictions and checkpoints will be written."
         },
+    )
+    eval_during_checkpointing: bool = field(
+        default=True,
+        metadata={"help": "Whether to run evaluation during checkpointing."},
     )
     do_visualize: bool = field(
         default=False,

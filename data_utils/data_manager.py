@@ -83,6 +83,7 @@ class DataManager:
         test_model_name_or_paths: List[str],
         use_generated_oladata: bool = False,
         attn_type: str = "ola",
+        pad_to_multiple_of: int = 8,
         do_classify_data_generate: bool = False
     ) -> None:
         self.dataset_name = dataset_name
@@ -90,6 +91,7 @@ class DataManager:
         self.train_model_name_or_paths = train_model_name_or_paths
         self.test_model_name_or_paths = test_model_name_or_paths
         self.use_generated_oladata = use_generated_oladata
+        self.pad_to_multiple_of = pad_to_multiple_of
         # init tokenizer
         self._init_tokenizers(
             train_model_name_or_paths + test_model_name_or_paths
@@ -218,14 +220,14 @@ class DataManager:
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
                 max_length=self.cutoff_len,
-                pad_to_multiple_of=8
+                pad_to_multiple_of=self.pad_to_multiple_of
             )
         elif self.dataset_name == "imdb":
             base_data_collator = DataCollatorWithPadding(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
                 max_length=self.cutoff_len,
-                pad_to_multiple_of=8
+                pad_to_multiple_of=self.pad_to_multiple_of
             )
 
         return ret_dataset, PartPaddingDataCollator(base_data_collator, task=task)
