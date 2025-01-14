@@ -15,7 +15,7 @@ from models.ola_augmentations import (
     AddGuassianNoise,
     RandomTemperatureScaling
 )
-from utils.contributions import ModelWrapper
+from utils.contributions import ModelWrapper, LMModelWrapperCaptum
 
 
 def is_causal_lm(model_type: str) -> bool:
@@ -132,6 +132,8 @@ class OLAModel(nn.Module):
                     )
                 if attn_type in ["alti", "rolloutplus"]:
                     self.wrapped_model = ModelWrapper(self.base_model)
+                if attn_type in ["grad", "grad_input", "ig"]:
+                    self.wrapped_model = LMModelWrapperCaptum(self.base_model)
             else:
                 self.base_model = None
         assert all(is_casual_list) or all([not i for i in is_casual_list]), "All models should be the same type."
@@ -220,7 +222,7 @@ class OLAModel(nn.Module):
         output_tandem: Optional[bool] = False,
         **kwargs,
     ) -> Union[OLALMOutput]:
-        assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti"]
+        assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
         attn = ola
         # move inputs to device
         input_ids = input_ids.to(self.device)
@@ -283,6 +285,8 @@ class OLAModel(nn.Module):
                 attn = get_alti_attention(
                     attentions, contributions_data
                 )
+            elif attn_type == "grad":
+                grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}

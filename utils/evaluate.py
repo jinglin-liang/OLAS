@@ -163,11 +163,11 @@ class MultiTokenMetric(TokenClsMetric):
         for p_en in preds_entities:
             if p_en in labels_entities:
                 self.total_tp += 1
-        self.precision = self.total_tp / self.total_p
+        self.precision = self.total_tp / self.total_p if self.total_p != 0 else 0
         for l_en in labels_entities:
             if l_en not in preds_entities:
                 self.total_fn += 1
-        self.recall = self.total_tp / (self.total_tp + self.total_fn)
+        self.recall = self.total_tp / (self.total_tp + self.total_fn) if (self.total_tp + self.total_fn) != 0 else 0
         self.f1 = 2 * self.precision * self.recall / (self.precision + self.recall + 1e-9)
 
         if data is not None:

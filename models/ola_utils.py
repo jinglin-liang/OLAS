@@ -5,6 +5,7 @@ import networkx as nx
 import torch
 
 from utils.utils_contributions import normalize_contributions, compute_joint_attention
+from utils.contributions import ModelWrapper, ClassificationModelWrapperCaptum, interpret_sentence
 
 def combine_attention_orders(attn_maps, attention_mask, use_orders):
     attn_maps = [(attn_map * attention_mask.unsqueeze(1).unsqueeze(-1)).mean(dim=1)
@@ -196,3 +197,11 @@ def get_alti_attention(attentions, contributions_data):
     alti_to_attn_map = {1:contributions_mix[-1].unsqueeze(0).unsqueeze(0).float().to(attn_device)}
     
     return alti_to_attn_map
+
+def get_grad_maps(attentions, contributions_data):
+    bert_model_wrapper = ClassificationModelWrapperCaptum(model)
+    grad_attributions = interpret_sentence(bert_model_wrapper, tokenizer, input_ids, 'grad', pred_ind)
+    grad_input_attributions = interpret_sentence(bert_model_wrapper, tokenizer, input_ids, 'grad_input', pred_ind)
+    grad_ig_attributions = interpret_sentence(bert_model_wrapper, tokenizer, input_ids, 'ig', pred_ind)
+    grad_input_attributions = grad_input_attributions['l2']
+    grad_ig_attributions = grad_ig_attributions['l2']

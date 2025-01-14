@@ -62,6 +62,7 @@ class ModelWrapper(nn.Module):
         model_layer_name = self.modules_config['layer']
         dense_name = self.modules_config['dense']
         pre_layer_norm = self.modules_config['pre_layer_norm']
+        ln_before_residual = self.modules_config['ln_before_residual']
         lnf_name = self.modules_config['final_layer_norm']
 
 
@@ -71,6 +72,7 @@ class ModelWrapper(nn.Module):
                 'model_layer_name': model_layer_name,
                 'dense_name': dense_name,
                 'pre_layer_norm': pre_layer_norm,
+                'ln_before_residual': ln_before_residual,
                 'lnf_name': lnf_name}
 
     def get_modules_model(self, layer):
@@ -100,10 +102,17 @@ class ModelWrapper(nn.Module):
         model_layer_name = self.modules_config['layer']
         dense_name = self.modules_config['dense']
         pre_layer_norm = self.modules_config['pre_layer_norm']
+        ln_before_residual = self.modules_config['ln_before_residual']
+        
         if pre_layer_norm == 'True':
             pre_layer_norm = True
         elif pre_layer_norm == 'False':
             pre_layer_norm = False
+            
+        if ln_before_residual == 'True':
+            ln_before_residual = True
+        elif ln_before_residual == 'False':
+            ln_before_residual = False
 
         model_importance_list = []
         transformed_vectors_norm_list = []
@@ -166,35 +175,63 @@ class ModelWrapper(nn.Module):
             hidden_shape = hidden_states.size()
             device = hidden_states.device
             residual = torch.einsum('sk,bsd->bskd', torch.eye(hidden_shape[1]).to(device), hidden_states)
-
-            # AVW_O + residual vectors -> (batch,seq_len,seq_len,embed_dim)
-            residual_weighted_layer = summed_weighted_layer + residual
             
-            @torch.no_grad()
-            def l_transform(x, w_ln):
-                '''Computes mean and performs hadamard product with ln weight (w_ln) as a linear transformation.'''
-                ln_param_transf = torch.diag(w_ln)
-                ln_mean_transf = torch.eye(w_ln.size(0)).to(w_ln.device) - \
-                    1 / w_ln.size(0) * torch.ones_like(ln_param_transf).to(w_ln.device)
+            if ln_before_residual == False:
+                # AVW_O + residual vectors -> (batch,seq_len,seq_len,embed_dim)
+                residual_weighted_layer = summed_weighted_layer + residual
+                
+                @torch.no_grad()
+                def l_transform(x, w_ln):
+                    '''Computes mean and performs hadamard product with ln weight (w_ln) as a linear transformation.'''
+                    ln_param_transf = torch.diag(w_ln)
+                    ln_mean_transf = torch.eye(w_ln.size(0)).to(w_ln.device) - \
+                        1 / w_ln.size(0) * torch.ones_like(ln_param_transf).to(w_ln.device)
 
-                out = torch.einsum(
-                    '... e , e f , f g -> ... g',
-                    x,
-                    ln_mean_transf,
-                    ln_param_transf
-                )
-                return out
+                    out = torch.einsum(
+                        '... e , e f , f g -> ... g',
+                        x,
+                        ln_mean_transf,
+                        ln_param_transf
+                    )
+                    return out
 
-            if pre_layer_norm == False:
+                if pre_layer_norm == False:
+                    # LN 1
+                    ln1_weight = ln1.weight.data
+                    ln1_eps = ln1.eps
+                    ln1_bias = ln1.bias
+
+                    # Transformed vectors T_i(x_j)
+                    transformed_vectors = l_transform(residual_weighted_layer, ln1_weight)
+                else:
+                    transformed_vectors = residual_weighted_layer
+                    
+            else:
+                @torch.no_grad()
+                def l_transform(x, w_ln):
+                    '''Computes mean and performs hadamard product with ln weight (w_ln) as a linear transformation.'''
+                    ln_param_transf = torch.diag(w_ln)
+                    ln_mean_transf = torch.eye(w_ln.size(0)).to(w_ln.device) - \
+                        1 / w_ln.size(0) * torch.ones_like(ln_param_transf).to(w_ln.device)
+
+                    out = torch.einsum(
+                        '... e , e f , f g -> ... g',
+                        x,
+                        ln_mean_transf,
+                        ln_param_transf
+                    )
+                    return out
+
                 # LN 1
                 ln1_weight = ln1.weight.data
                 ln1_eps = ln1.eps
                 ln1_bias = ln1.bias
 
                 # Transformed vectors T_i(x_j)
-                transformed_vectors = l_transform(residual_weighted_layer, ln1_weight)
-            else:
-                transformed_vectors = residual_weighted_layer
+                transformed_vectors = l_transform(summed_weighted_layer, ln1_weight)  
+                    
+                # AVW_O + residual vectors -> (batch,seq_len,seq_len,embed_dim)
+                transformed_vectors = transformed_vectors + residual
 
             # Output vectors 1 per source token
             attn_output = transformed_vectors.sum(dim=2)
