@@ -19,7 +19,7 @@ from utils.contributions import ModelWrapper
 
 
 def is_causal_lm(model_type: str) -> bool:
-    causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2", "bloom"}
+    causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2", "bloom", "mistral"}
     non_causal_models = {"bert", "roberta", "albert", "deberta-v2", "electra"}
     if model_type.lower() in causal_models:
         return True

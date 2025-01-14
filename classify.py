@@ -7,13 +7,6 @@ import numpy as np
 import random
 
 import lmdb, pickle
-from models.ola_utils import cal_maskes
-from models.ola_model import preprocess_ola
-from models.ola_augmentations import (
-    RandomHightlightColumns,
-    AddGuassianNoise,
-    RandomTemperatureScaling
-)
 
 import torch
 from torch import nn
@@ -38,6 +31,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import sys
 import json
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader
@@ -49,7 +43,6 @@ from transformers import (
 from utils import (
     ADAPTERS_CKPT_NAME,
     save_arguments,
-    evaluate_ola_adapter,
     visualize_attn_map,
     visualize_layer_attn_map,
     TextClsMetric,
@@ -60,12 +53,20 @@ from utils import (
     OLALMTrainingArguments as TrainingArguments,
     OLALMTrainer,
 )
+from utils.visualize import draw_attn_heatmap
 from data_utils import (
     generate_save_ola_data,
     get_oladata_dir_path,
     DataManager,
 )
 from models.ola_model import OLAModel
+from models.ola_utils import cal_maskes
+from models.ola_model import preprocess_ola
+from models.ola_augmentations import (
+    RandomHightlightColumns,
+    AddGuassianNoise,
+    RandomTemperatureScaling
+)
 
 
 def args_parser() -> Tuple[ModelArguments, DataArguments, TrainingArguments]:
@@ -183,7 +184,7 @@ class DataIter(object):
         return data
 
 class ClassifyDataset(Dataset):
-    def __init__(self, data_dirs, selected_orders, is_casual=True, use_augment=True):
+    def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100):
         self.len = 0
         self.data = []
         self.remove_outliers = True
@@ -191,7 +192,7 @@ class ClassifyDataset(Dataset):
         self.is_casual = is_casual
         self._init_ola_augmentation(use_augment)
         self.transform = transforms.Compose([
-            transforms.Resize(size=(100, 100), antialias=True)
+            transforms.Resize(size=(sentence_len, sentence_len), antialias=True)
         ])
 
         for data_dir in data_dirs:
@@ -204,7 +205,7 @@ class ClassifyDataset(Dataset):
                     data_byte = txn.get(data_id)
                     data = pickle.loads(data_byte)
                     tmp_attn_map = {k: attn for k, attn in data['ola'].items() if k in selected_orders}
-                    self.data.append({'id': data['id'], 'attn_map': tmp_attn_map, 'attention_mask': data['attention_mask'], 'model': data_dir[42:-6]})
+                    self.data.append({'id': data['id'], 'attn_map': tmp_attn_map, 'attention_mask': data['attention_mask'], 'model': data_dir.split('/')[-2]})
 
     def __len__(self):
         return self.len
@@ -297,18 +298,21 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Yi-1.5-6B-Chat', 6:'Yi-1.5-9B-Chat'}
-    train_model_ids = [1,2,5,6]
-    test_model_ids = [3,4]
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
+    train_model_ids = [3,4,5,6]
+    test_model_ids = [1,2]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
     selected_orders = [1]
-    num_classes = 1500
+    num_classes = 1000
+    sentence_len = 50
+    use_augment = True
 
-    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify/{model_name}/train' for model_name in test_model_names]
-    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=False)
-    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=False)
+    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
+    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+    # print(train_dataset[0])
 
     train_dataloader = DataLoader(
         train_dataset,

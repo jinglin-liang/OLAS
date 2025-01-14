@@ -121,14 +121,14 @@ class ModelArguments:
             self.eval_models_name_list += self.train_models_name_list
         if self.ola_augments is None:
             self.ola_augments = [
-                # {
-                #     "class_name": "RandomTemperatureScaling",
-                #     "params": {
-                #         "p": 0.2,
-                #         "min_temp": 0.6,
-                #         "max_temp": 3
-                #     }
-                # },
+                {
+                    "class_name": "RandomTemperatureScaling",
+                    "params": {
+                        "p": 0.2,
+                        "min_temp": 0.6,
+                        "max_temp": 3
+                    }
+                },
                 {
                     "class_name": "RandomHightlightColumns",
                     "params": {

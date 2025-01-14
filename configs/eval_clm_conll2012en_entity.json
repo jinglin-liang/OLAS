@@ -1,11 +1,9 @@
 {
     "train_models_name_list": [
-        "pretrained_models/Yi-1.5-9B-Chat"
+        "pretrained_models/gemma-2-9b-it"
     ],
     "eval_models_name_list": [
-        "pretrained_models/Qwen2-7B-Instruct",
-        "pretrained_models/gemma-2-2b-it",
-        "pretrained_models/Yi-1.5-6B-Chat"
+        "pretrained_models/Llama-3.1-8B-Instruct"
     ],
     "dataset_name": "conll2012en_entity",
     "task": "entity",
@@ -13,5 +11,5 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_yi-9b_nl3_rh_gs/checkpoint-last/ola_adapter_weight.bin"
+    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_gemma-9b_ep5_rh_gs/checkpoint-last/ola_adapter_weight.bin"
 }

@@ -121,7 +121,7 @@ class DataManager:
             use_generated_classify_data = True
             assert dataset_name == "conll2012en_entity"
             if use_generated_classify_data:
-                with open('classify_sentences.json', 'r') as f:
+                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}.json', 'r') as f:
                     final_sentences = json.load(f)
             else:
                 final_sentences = []
@@ -136,7 +136,7 @@ class DataManager:
                             break
                 final_sentences = final_sentences[:1000]
                 print("final sentence num =", len(final_sentences))
-                with open('classify_sentences.json', 'w') as f:
+                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}.json', 'w') as f:
                     json.dump(final_sentences, f)
 
         for tmp_train_model in train_model_name_or_paths:
@@ -149,7 +149,7 @@ class DataManager:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 kwargs["language"] = "en"
                 kwargs["task"] = dataset_name.split("_")[-1]
-                kwargs["cutoff_len"] = final_sentence_len
+                kwargs["cutoff_len"] = final_sentence_len + 100
                 self.data["train"][tmp_train_model] = ClassifyDataset(final_sentences, **kwargs)
             elif dataset_name in ["conll2012cn_pos", "conll2012cn_entity"]:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]

@@ -10,7 +10,6 @@ from transformers.trainer import WEIGHTS_NAME, TRAINING_ARGS_NAME
 from transformers.utils import logging, SAFE_WEIGHTS_NAME
 import safetensors
 
-from models import OLAModel
 from data_utils import DataManager
 from utils.arguments import OLALMTrainingArguments
 from utils.evaluate import evaluate_ola_adapter_with_multi_llms
@@ -49,7 +48,7 @@ class OLALMTrainer(Trainer):
         supported_classes = (PreTrainedModel,)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        if isinstance(self.model, OLAModel):
+        if hasattr(self.model, "save_adapter") and callable(getattr(self.model, "save_adapter")):
             self.model.save_adapter(
                 os.path.join(output_dir, ADAPTERS_CKPT_NAME)
             )

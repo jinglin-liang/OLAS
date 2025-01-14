@@ -1,6 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct"
+        "pretrained_models/Llama-3.1-8B-Instruct"
     ],
     "eval_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
@@ -16,7 +16,7 @@
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
-    "do_eval": false,
+    "do_eval": true,
     "num_train_epochs": 15,
     "learning_rate": 1e-5,
     "per_device_train_batch_size": 2,
