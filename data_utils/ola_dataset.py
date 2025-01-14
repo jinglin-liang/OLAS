@@ -7,7 +7,6 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 
-from models import OLAModel
 import data_utils
 from data_utils.data import DATASET_NAME_TO_PATH
 
@@ -49,7 +48,7 @@ def write_cache(env, cache):
 
 
 def generate_save_ola_data(
-    model: OLAModel,
+    model,
     dataset,
     data_collator,
     save_dir: str,
@@ -169,8 +168,9 @@ class OLADataset_conll2012:
                     if language == "en":
                         if tmp_idx > 0:
                             tmp_word = " " + tmp_word
-                    if hasattr(tokenizer, "vocab_file") and "Yi-1.5" in tokenizer.vocab_file:
-                        tmp_word = tmp_word.lstrip(" ")
+                    if hasattr(tokenizer, "vocab_file") and tokenizer.vocab_file != None:
+                        if "Yi-1.5" in tokenizer.vocab_file:
+                            tmp_word = tmp_word.lstrip(" ")
                     tokenized_word = tokenizer(
                         tmp_word,
                         truncation=True,
@@ -226,7 +226,6 @@ class ClassifyDataset:
     def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names, named_entities_names, language, task):
         # self.pos_tags_names = pos_tags_names
         # self.named_entities_names = named_entities_names
-        cutoff_len = 100
         self.data = []
         id = -1
         for sentence in sentences:

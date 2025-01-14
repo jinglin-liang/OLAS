@@ -1,9 +1,8 @@
 {
-    "use_generated_oladata": true,
     "train_models_name_list": [
         "pretrained_models/Yi-1.5-6B-Chat"
     ],
-    "adapter_architecture": "tokencls_axialtranformerrnn",
+    "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2012en_entity",
     "task": "entity",
     "cutoff_len": 64,
