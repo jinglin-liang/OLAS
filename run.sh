@@ -58,7 +58,7 @@ do
             then
                 LOG_FILE=outputs/logs/CFG_${CFG:8:20}_at_${AT}_sameaug.log
                 {
-                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --attn_type $AT --use_generated_oladata true >> $LOG_FILE 2>&1
+                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --attn_type $AT --use_generated_oladata true --axial_tf_layers 3 >> $LOG_FILE 2>&1
                 } &
                 training_pid=$!
                 for used_gpu in "${FREE_GPUS[@]}"; do

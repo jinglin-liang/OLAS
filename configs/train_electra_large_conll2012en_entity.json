@@ -2,6 +2,14 @@
     "train_models_name_list": [
         "pretrained_models/electra-large-generator"
     ],
+    "eval_models_name_list": [
+        "pretrained_models/bert-base-cased",
+        "pretrained_models/bert-large-cased",
+        "pretrained_models/roberta-base",
+        "pretrained_models/roberta-large",
+        "pretrained_models/electra-base-generator",
+        "pretrained_models/electra-large-generator"
+    ],
     "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2012en_entity",
     "task": "entity",

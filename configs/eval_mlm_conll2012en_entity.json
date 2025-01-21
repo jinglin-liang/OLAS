@@ -1,6 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/electra-base-generator"
+        "pretrained_models/roberta-large"
     ],
     "eval_models_name_list": [
         "pretrained_models/bert-base-cased",
@@ -16,6 +16,6 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_electra-base_rolloutplus/checkpoint-last/ola_adapter_weight.bin",
+    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_roberta-large_nl3_rh_gs/checkpoint-last/ola_adapter_weight.bin",
     "attn_type": "ola"
 }
