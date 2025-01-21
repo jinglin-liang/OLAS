@@ -6,6 +6,7 @@ models:
     values: 'attention.self.value'
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
+    ln_before_residual: 'False'
   roberta:
     layer: 'roberta.encoder.layer'
     ln1: 'attention.output.LayerNorm'
@@ -13,6 +14,7 @@ models:
     values: 'attention.self.value'
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
+    ln_before_residual: 'False'
   electra:
     layer: 'electra.encoder.layer'
     ln1: 'attention.output.LayerNorm'
@@ -20,6 +22,7 @@ models:
     values: 'attention.self.value'
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
+    ln_before_residual: 'False'
   qwen2:
     layer: 'model.layers'
     ln1: 'input_layernorm'

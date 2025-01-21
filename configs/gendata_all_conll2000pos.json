@@ -1,19 +1,11 @@
 {
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct",
-        "pretrained_models/Qwen2-7B-Instruct",
-        "pretrained_models/gemma-2-2b-it",
-        "pretrained_models/gemma-2-9b-it",
-        "pretrained_models/bloomz-3b",
-        "pretrained_models/bloomz-7b1",
-        "pretrained_models/Yi-1.5-6B-Chat",
-        "pretrained_models/Yi-1.5-9B-Chat",
         "pretrained_models/bert-base-cased",
         "pretrained_models/bert-large-cased",
         "pretrained_models/roberta-base",
         "pretrained_models/roberta-large",
-        "pretrained_models/albert-base-v2",
-        "pretrained_models/albert-large-v2"
+        "pretrained_models/electra-base-generator",
+        "pretrained_models/electra-large-generator"
     ],
     "dataset_name": "conll2000_pos",
     "cutoff_len": 64,

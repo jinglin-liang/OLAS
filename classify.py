@@ -298,18 +298,20 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
-    train_model_ids = [3,4,5,6]
-    test_model_ids = [1,2]
+    ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
+    train_model_ids = [1,2,5,6]
+    test_model_ids = [3,4]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
     selected_orders = [1]
     num_classes = 1000
     sentence_len = 50
     use_augment = True
+    attn_type = 'alti'
+    lr = 0.003
 
-    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
+    train_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
     train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     # print(train_dataset[0])
@@ -335,11 +337,11 @@ if __name__ == "__main__":
     model = BaseNet(model_args, num_classes=num_classes)
         
     model.train().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
     # optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=5e-4)
 
     train_acc = test_acc = best_acc = 0
-    pbar = tqdm(range(90000), desc="train classifier")
+    pbar = tqdm(range(100000), desc="train classifier")
     for step in pbar:
         data = train_dataiter.next()
         images, labels = data['attn_map'].cuda(), data['index'].cuda()
@@ -360,9 +362,12 @@ if __name__ == "__main__":
                 model.load_state_dict(best_w)
             else:
                 best_w = model.state_dict()
+                best_cor_model_dict = cor_model_dict
                 print(cor_model_dict)
 
             best_acc = max(best_acc, test_acc)
 
-    print(best_acc)
+    print(f"best_acc={best_acc}")
+    print(best_cor_model_dict)
+    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}")
     

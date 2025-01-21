@@ -1,7 +1,6 @@
 {
-    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/electra-base-generator"
     ],
     "eval_models_name_list": [
         "pretrained_models/bert-base-cased",

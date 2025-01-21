@@ -1,4 +1,4 @@
-GPU_LIST=('4' '5' '6')
+GPU_LIST=('5' '6')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -46,9 +46,9 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_bert_base_conll2012en_entity.json' 'configs/train_roberta_base_conll2012en_entity.json' 'configs/train_electra_base_conll2012en_entity.json';
+for CFG in 'configs/train_roberta_base_conll2000pos.json' 'configs/train_roberta_large_conll2000pos.json' 'configs/train_electra_base_conll2000pos.json' 'configs/train_electra_large_conll2000pos.json';
 do
-    for AT in 'tandem' 'rolloutplus' 'alti' 'first';
+    for AT in 'ola';
     do
         while true
         do
@@ -56,9 +56,9 @@ do
             have_free_gpu=$?
             if [ $have_free_gpu -eq 1 ]
             then
-                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_at_${AT}.log
+                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_at_${AT}_pos.log
                 {
-                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --attn_type $AT --use_generated_oladata true >> $LOG_FILE 2>&1
+                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --attn_type $AT --use_generated_oladata true --axial_tf_layers 3 >> $LOG_FILE 2>&1
                 } &
                 training_pid=$!
                 for used_gpu in "${FREE_GPUS[@]}"; do
