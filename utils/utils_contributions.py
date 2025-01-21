@@ -281,7 +281,10 @@ def normalize_contributions(model_contributions,scaling='minmax',resultant_norm=
                 # print('resultant_norm[l]', resultant_norm[l].size())
                 # print('model_contributions[l]', model_contributions[l])
                 # print('normalized_model_contributions[l].sum(dim=-1,keepdim=True)', model_contributions[l].sum(dim=-1,keepdim=True))
-                normalized_model_contributions[l] = model_contributions[l] + torch.abs(resultant_norm[l].unsqueeze(1))
+                try:
+                    normalized_model_contributions[l] = model_contributions[l] + torch.abs(resultant_norm[l].unsqueeze(1))
+                except:
+                    normalized_model_contributions[l] = model_contributions[l] + torch.abs(resultant_norm[l])
                 normalized_model_contributions[l] = torch.clip(normalized_model_contributions[l],min=0)
                 normalized_model_contributions[l] = normalized_model_contributions[l] / normalized_model_contributions[l].sum(dim=-1,keepdim=True)
         elif scaling == 'softmax':
@@ -462,8 +465,11 @@ def compute_joint_attention(att_mat):
     joint_attentions = att_mat[0].unsqueeze(0)
 
     for i in range(1,layers):
-
-        C_roll_new = torch.matmul(att_mat[i],joint_attentions[i-1])
+        
+        try:
+            C_roll_new = torch.matmul(att_mat[i],joint_attentions[i-1])
+        except:
+            C_roll_new = att_mat[i] * joint_attentions[i-1]
 
         joint_attentions = torch.cat([joint_attentions, C_roll_new.unsqueeze(0)], dim=0)
         

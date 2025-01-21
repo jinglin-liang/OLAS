@@ -29,15 +29,18 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 
-def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False, origin=True):
+def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False, result_type='cat'):
+    assert result_type in ['cat', 'origin', 'rm_ol']
     stack_ola_tensor = torch.cat([v for _, v in ola.items()], dim=1)
     if remove_outliers:
         outliers_mask = ola_mask["outliers_mask"]
         outliers_mask_tensor = torch.cat([v for _, v in outliers_mask.items()], dim=1)
         stack_ola_tensor_wo_ol = stack_ola_tensor * (1 - outliers_mask_tensor)
-        if origin:
+        if result_type == 'cat':
             stack_ola_tensor = torch.cat([stack_ola_tensor, stack_ola_tensor_wo_ol], dim=1)
-        else:
+        elif result_type == 'origin':
+            stack_ola_tensor = stack_ola_tensor
+        elif result_type == 'rm_ol':
             stack_ola_tensor = stack_ola_tensor_wo_ol
     if regularize:
         stack_ola_tensor = stack_ola_tensor / (stack_ola_tensor.sum(dim=-1, keepdim=True) + 1e-10)
@@ -279,12 +282,17 @@ class OLAModel(nn.Module):
                 attn = get_rolloutplus_attention(
                     attentions, contributions_data
                 )
+                if input_ids.shape[-1] == 1:
+                    attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
             elif attn_type == "alti":
                 tmp_b = {'input_ids': input_ids, 'attention_mask': attention_mask, 'position_ids': position_ids, 'labels': None}
-                hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
+                with torch.no_grad():
+                    hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
                 attn = get_alti_attention(
                     attentions, contributions_data
                 )
+                if input_ids.shape[-1] == 1:
+                    attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
             elif attn_type == "grad":
                 grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
         else:

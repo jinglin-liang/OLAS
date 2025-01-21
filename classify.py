@@ -233,7 +233,7 @@ class ClassifyDataset(Dataset):
             attn, attn_mask, 
             remove_outliers=self.remove_outliers, 
             is_casual=self.is_casual,
-            origin=False
+            result_type='rm_ol'
         )
         stack_attn_tensor = self.transform(stack_attn_tensor)[0]
         return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model']}
@@ -299,17 +299,17 @@ if __name__ == "__main__":
     setup_seed(2025)
 
     ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
-    train_model_ids = [3,4,5,6]
-    test_model_ids = [1,2]
+    train_model_ids = [1,2,3,4]
+    test_model_ids = [5,6]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
     selected_orders = [1]
     num_classes = 1000
     sentence_len = 50
-    use_augment = True
+    use_augment = False
 
-    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
+    train_data_dir_paths = [f'datasets/conll2012_tandem_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/conll2012_tandem_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
     train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     # print(train_dataset[0])
@@ -339,7 +339,7 @@ if __name__ == "__main__":
     # optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=5e-4)
 
     train_acc = test_acc = best_acc = 0
-    pbar = tqdm(range(90000), desc="train classifier")
+    pbar = tqdm(range(100000), desc="train classifier")
     for step in pbar:
         data = train_dataiter.next()
         images, labels = data['attn_map'].cuda(), data['index'].cuda()

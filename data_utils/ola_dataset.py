@@ -71,7 +71,10 @@ def generate_save_ola_data(
     bar = tqdm(dataloader, desc="Generating OLA data")
     cnt = 0
     cache = {}
-    for data in bar:
+    for didx, data in enumerate(bar):
+        
+        if didx <28:
+            continue
         if data["input_ids"].shape[-1] == 0:
             continue
         with torch.no_grad():
@@ -99,6 +102,8 @@ def generate_save_ola_data(
         if cnt % 400 == 0:
             write_cache(env, cache)
             cache = {}
+        del output, attn
+        torch.cuda.empty_cache()
         # if cnt == 20:
         #     break
     cache["num_samples".encode('utf-8')] = str(cnt).encode("utf-8")
@@ -228,7 +233,7 @@ class ClassifyDataset:
         # self.named_entities_names = named_entities_names
         self.data = []
         id = -1
-        for sentence in sentences:
+        for sidx, sentence in enumerate(sentences):
             id += 1
             tokens = sentence
             # pos_tags = sentence["pos_tags"]

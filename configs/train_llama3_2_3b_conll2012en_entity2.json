@@ -1,6 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/gemma-2-2b-it"
+        "pretrained_models/Llama-3.2-3B-Instruct"
     ],
     "eval_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
@@ -10,11 +10,18 @@
         "pretrained_models/Llama-3.2-3B-Instruct",
         "pretrained_models/Llama-3.1-8B-Instruct"
     ],
+    "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2012en_entity",
     "task": "entity",
     "cutoff_len": 64,
-    "do_train": false,
+    "logging_steps": 10,
+    "do_train": true,
     "do_eval": true,
-    "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/-conll2012en_entity_gemma-2b_ep5_rh_gs/checkpoint-33110/ola_adapter_weight.bin"
+    "num_train_epochs": 15,
+    "learning_rate": 3e-5,
+    "per_device_train_batch_size": 2,
+    "per_device_eval_batch_size": 8,
+    "save_steps": 0.2,
+    "use_orders": [1, 2],
+    "sp_aug": "llama"
 }
