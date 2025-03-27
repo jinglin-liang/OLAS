@@ -1,7 +1,6 @@
 {
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct",
-        "pretrained_models/bert-base-cased"
+        "pretrained_models/Llama-3.1-8B-Instruct"
     ],
     "dataset_name": "conll2000_pos",
     "cutoff_len": 64,

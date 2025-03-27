@@ -298,19 +298,19 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    # ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
-    train_model_ids = [1,2,5,6]
-    test_model_ids = [3,4]
+    # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
+    train_model_ids = [3,4,5,6]
+    test_model_ids = [1,2]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
-    selected_orders = [1]
+    selected_orders = [3]
     num_classes = 1000
     sentence_len = 50
     use_augment = True
-    attn_type = 'alti'
-    lr = 0.003
-
+    attn_type = 'ola'
+    lr = 0.001
+ 
     train_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
     test_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
     train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
@@ -371,4 +371,5 @@ if __name__ == "__main__":
     print(f"best_acc={best_acc}")
     print(best_cor_model_dict)
     print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}")
+    print(selected_orders)
     

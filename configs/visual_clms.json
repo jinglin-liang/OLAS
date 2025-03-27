@@ -1,7 +1,9 @@
 {
-    "visual_text_file": "datasets/visualize/all_text.txt",
+    "visual_text_file": "datasets/visualize/final.txt",
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct"
+        "pretrained_models/Qwen2-1.5B-Instruct",
+        "pretrained_models/gemma-2-2b-it",
+        "pretrained_models/Llama-3.2-3B-Instruct"
     ],
     "do_train": false,
     "do_eval": false,
@@ -13,5 +15,7 @@
     ],
     "cutoff_len": 64,
     "visual_annot_size": 1,
-    "visual_label_size": 3
+    "visual_label_size": 6,
+    "attn_type": "ola",
+    "outliers_sigma_multiplier": 3.0
 }

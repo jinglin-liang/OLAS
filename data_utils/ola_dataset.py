@@ -3,6 +3,7 @@ import inspect
 import lmdb
 import pickle
 from tqdm import tqdm
+from thop import profile
 
 import torch
 from torch.utils.data import DataLoader
@@ -72,9 +73,6 @@ def generate_save_ola_data(
     cnt = 0
     cache = {}
     for didx, data in enumerate(bar):
-        
-        if didx <28:
-            continue
         if data["input_ids"].shape[-1] == 0:
             continue
         with torch.no_grad():
@@ -119,6 +117,41 @@ def generate_save_ola_data(
     write_cache(env, cache)
     print('save {} samples to {}'.format(cnt, save_dir))
     env.close()
+
+
+def calc_flop(
+    model,
+    dataset,
+    data_collator,
+    attn_type: str = "ola"
+):
+    # create dataloader
+    dataloader = DataLoader(
+        dataset,
+        collate_fn=data_collator,
+        batch_size=1,
+        shuffle=False,
+    )
+    # set model to eval mode
+    model = model.eval().cuda()
+    # generate data
+    interested_keys = inspect.signature(model.forward).parameters.keys()
+    bar = tqdm(dataloader, desc="Calculating FLOP")
+    tot = 0
+    for didx, data in enumerate(bar):
+        if didx == 1000:
+            break
+        if data["input_ids"].shape[-1] == 0:
+            continue
+        with torch.no_grad():
+            input_dict = {k: v for k, v in data.items() if k in interested_keys}
+            input_dict["output_attn"] = True
+            input_dict["labels"] = None
+            input_dict["attn_type"] = attn_type
+            flops, params = profile(model, inputs=(input_dict['input_ids'], input_dict['attention_mask'], input_dict['labels'], None, None, None, None, 'pos', attn_type, False, False, True))
+        tot += flops
+    tot /= 1000
+    print("avg flops =", tot)
 
 
 class OLADataset:

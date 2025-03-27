@@ -106,6 +106,18 @@ class DataManager:
             "test": {},
         }
 
+        do_cnt = False
+        if do_cnt:
+            cnt = 0
+            for i in range(len(raw_train_data)):
+                for j in range(len(raw_train_data[i]['sentences'])):
+                    cnt += len(raw_train_data[i]['sentences'][j]['words'])
+            for i in range(len(raw_test_data)):
+                for j in range(len(raw_test_data[i]['sentences'])):
+                    cnt += len(raw_test_data[i]['sentences'][j]['words'])
+            cnt = cnt/84666
+
+
         kwargs = {}
         kwargs["cutoff_len"] = self.cutoff_len
         if dataset_name in ["conll2000_pos", "conll2000_chunk"]:
@@ -169,7 +181,7 @@ class DataManager:
                 )
                 # self.data["train"][tmp_train_model] = \
                 #     raw_train_data.map(preprocess_func, load_from_cache_file=False)
-                self.data["train"][tmp_train_model] = raw_train_data.map(preprocess_func)
+                self.data["train"][tmp_train_model] = raw_train_data.map(preprocess_func, load_from_cache_file=False)
         
         for tmp_test_model in test_model_name_or_paths:
             if self.use_generated_oladata and not do_classify_data_generate:
@@ -197,7 +209,7 @@ class DataManager:
                 )
                 # self.data["test"][tmp_test_model] = \
                 #     raw_test_data.map(preprocess_func, load_from_cache_file=False)
-                self.data["test"][tmp_test_model] = raw_test_data.map(preprocess_func)
+                self.data["test"][tmp_test_model] = raw_test_data.map(preprocess_func, load_from_cache_file=False)
 
     def _init_tokenizers(self, all_model_name_or_paths: List[str]):
         self.tokenizer_dict = {}

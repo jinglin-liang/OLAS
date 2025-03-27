@@ -223,6 +223,8 @@ class OLAModel(nn.Module):
         task: Optional[str] = "pos",
         attn_type: str = "ola",
         output_tandem: Optional[bool] = False,
+        do_vis: bool = False,
+        calc_flop: bool = False,
         **kwargs,
     ) -> Union[OLALMOutput]:
         assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
@@ -298,6 +300,8 @@ class OLAModel(nn.Module):
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
+        if calc_flop:
+            return attn
         # calculate maskes from ola
         attn_mask = cal_maskes(
             attn, attention_mask, 
@@ -321,7 +325,10 @@ class OLAModel(nn.Module):
         )
         if "textcls" in self.adapter_architecture:
             # adaptor forward
-            prediction_scores = self.adaptor(stack_attn_tensor)
+            if do_vis:
+                prediction_scores = None
+            else:
+                prediction_scores = self.adaptor(stack_attn_tensor)
             # calculate loss
             if labels is not None:
                 loss_fct = nn.CrossEntropyLoss()
@@ -374,7 +381,9 @@ class OLAModel(nn.Module):
     def cal_ola_from_text(
         self, 
         text_list: List[str], 
-        cutoff_len: int = 320
+        cutoff_len: int = 320,
+        attn_type: str = 'ola',
+        do_vis: bool = False
     ):
         tokenized_text_ls = [
             self.tokenizer(
@@ -391,9 +400,18 @@ class OLAModel(nn.Module):
             padding=False,
         )
         batch_input = collator_fn(tokenized_text_ls)
-        output = self(
-            **batch_input, 
-            output_attn=True, 
-            output_attentions=True
-        )
+        if attn_type == 'ola':
+            output = self(
+                **batch_input, 
+                output_attn=True, 
+                output_attentions=True,
+                do_vis=do_vis
+            )
+        elif attn_type == 'tandem':
+            output = self(
+                **batch_input, 
+                output_attn=True, 
+                attn_type=attn_type,
+                do_vis=do_vis
+            )
         return output
