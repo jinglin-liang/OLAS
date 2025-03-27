@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, get_flow_attention, get_alti_attention, get_rolloutplus_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet, AxialTransformerReAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
@@ -170,6 +170,8 @@ class OLAModel(nn.Module):
             self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes, **kwargs)
         elif adapter_architecture == "tokencls_unet":
             self.adaptor = UNet(ola_input_channal, num_classes, **kwargs)
+        elif adapter_architecture == "re_axialtranformer":
+            self.adaptor = AxialTransformerReAdapter(ola_input_channal, num_classes, **kwargs)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -223,6 +225,10 @@ class OLAModel(nn.Module):
         task: Optional[str] = "pos",
         attn_type: str = "ola",
         output_tandem: Optional[bool] = False,
+        e1_s: Optional[torch.LongTensor] = None,
+        e1_e: Optional[torch.LongTensor] = None,
+        e2_s: Optional[torch.LongTensor] = None,
+        e2_e: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[OLALMOutput]:
         assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
@@ -232,6 +238,11 @@ class OLAModel(nn.Module):
         attention_mask = attention_mask.to(self.device)
         if labels is not None:
             labels = labels.to(self.device)
+        if e1_s is not None:
+            e1_s = e1_s.to(self.device)
+            e1_e = e1_e.to(self.device)
+            e2_s = e2_s.to(self.device)
+            e2_e = e2_e.to(self.device)
         # calculate attn map
         if attn is None:
             # base model forward
@@ -293,8 +304,8 @@ class OLAModel(nn.Module):
                 )
                 if input_ids.shape[-1] == 1:
                     attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
-            elif attn_type == "grad":
-                grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
+            # elif attn_type == "grad":
+            #     grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
@@ -340,6 +351,21 @@ class OLAModel(nn.Module):
                     loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
                     loss_weight = torch.ones_like(labels.view(-1)) - 0.5 * (labels.view(-1) == 0)
                     loss = torch.mean(loss * loss_weight)
+            else:
+                loss = None
+        elif "re" in self.adapter_architecture:
+            # preprocess e1_s, e1_e, e2_s, e2_e
+            pad_num = (attention_mask == 0).sum(-1)
+            e1_e += pad_num
+            e1_s += pad_num
+            e2_e += pad_num
+            e2_s += pad_num
+            # adaptor forward
+            prediction_scores = self.adaptor(stack_attn_tensor, e1_s, e1_e, e2_s, e2_e)
+            # calculate loss
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(prediction_scores, labels)
             else:
                 loss = None
         else:

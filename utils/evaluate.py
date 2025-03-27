@@ -273,7 +273,7 @@ def evaluate_ola_adapter_with_multi_llms(
             shuffle=False,
         )
         # load eval metric
-        if data_manager.dataset_name.lower() == "imdb":
+        if data_manager.dataset_name.lower() in ["imdb", "semeval_re"]:
             eval_metric = TextClsMetric()
         elif data_manager.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos", "conll2012cn_pos"]:
             if hasattr(eval_dataset.datasets[0], "features"):

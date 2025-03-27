@@ -9,6 +9,7 @@ DATASET_NAME_TO_PATH = {
     "conll2012en_pos": "datasets/conll2012/conll2012_ontonotesv5.py",
     "conll2012cn_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
     "conll2012en_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
+    "semeval_re": "datasets/sem_eval_2010_task_8/data",
 }
 
 
@@ -134,6 +135,11 @@ def load_raw_data(data_name: str):
         return (train_data, test_data), None
     elif data_name.lower() in ["conll2012en_pos", "conll2012en_entity"]:  # conll2012 pos tagging
         data = load_dataset(DATASET_NAME_TO_PATH[data_name], 'english_v4', trust_remote_code=True)
+        train_data = data["train"]
+        test_data = data["test"]
+        return (train_data, test_data), None
+    elif data_name.lower() == "semeval_re":  # semeval relation extraction
+        data = load_dataset(DATASET_NAME_TO_PATH[data_name])
         train_data = data["train"]
         test_data = data["test"]
         return (train_data, test_data), None
