@@ -198,7 +198,6 @@ def main():
             model_args.outliers_sigma_multiplier,
             data_args.visual_annot_size,
             data_args.visual_label_size,
-            data_args.attn_type,
             model_args.load_method
         )
         # visualize_layer_attn_map(

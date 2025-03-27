@@ -99,7 +99,7 @@ class ClassifyDataset(Dataset):
             attn, attn_mask, 
             remove_outliers=self.remove_outliers, 
             is_casual=self.is_casual,
-            origin=False
+            result_type="rm_ol"
         )
         stack_attn_tensor = self.transform(stack_attn_tensor)[0]
         return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model']}
@@ -149,9 +149,10 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    model1_name = ams[3]
-    model2_name = ams[1]
+    # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
+    model1_name = ams[5]
+    model2_name = ams[3]
     selected_orders = [1]
     sentence_len = 50
     use_augment = False
@@ -168,8 +169,8 @@ if __name__ == "__main__":
     elif metric_name == 'psnr':
         metric = PeakSignalNoiseRatio().to('cuda')
 
-    acc = 0
-    hit_num = 1
+    hit_num = [1, 3, 5]
+    acc = {f"hit@{hit}":0 for hit in hit_num}
     print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num}")
     bar = tqdm(enumerate(dataset1), desc='datas')
     for idx1, data1 in bar:
@@ -181,10 +182,14 @@ if __name__ == "__main__":
         target_value = metric_value_list[idx1]
         sorted_list = sorted(metric_value_list, reverse=True)
         target_pos = sorted_list.index(target_value) + 1
-        if target_pos <= hit_num:
-            acc += 1
-        bar.set_postfix_str(f"acc={acc * 100 / (idx1 + 1)}")
-    print('acc =', acc * 100 / len(dataset1))
+        for hit in hit_num:
+            if target_pos <= hit:
+                acc[f"hit@{hit}"] += 1
+        postfix_str = ""
+        for k, v in acc.items():
+            postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1)} " 
+        bar.set_postfix_str(postfix_str)
+    # print('acc =', acc * 100 / len(dataset1))
     
 
 # 计算 PSNR 值

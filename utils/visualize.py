@@ -59,7 +59,6 @@ def visualize_attn_map(
     outliers_sigma_multiplier: float = 3.0,
     annot_size: int = 1,
     label_size: int = 3,
-    attn_type: str = 'ola',
     load_method: str = 'origin'
 ):
     ola_dict = {}
