@@ -191,11 +191,13 @@ def main():
             model_args.use_orders,
             text_list,
             training_args.output_dir,
-            model_args.ola_augments,
+            None,
+            data_args.attn_type,
             data_args.cutoff_len,
             model_args.outliers_sigma_multiplier,
             data_args.visual_annot_size,
-            data_args.visual_label_size
+            data_args.visual_label_size,
+            model_args.load_method
         )
         # visualize_layer_attn_map(
         #     model_args.train_models_name_list,
@@ -221,7 +223,8 @@ def main():
                 use_orders=model_args.use_orders,
                 remove_outliers=True,
                 outliers_sigma_multiplier=3,
-                attn_type=data_args.attn_type
+                attn_type=data_args.attn_type,
+                load_method=model_args.load_method,
             )
             splits = ["train", "test"] if not data_args.do_classify_data_generate else ["train"]
             for split in splits:
@@ -229,7 +232,7 @@ def main():
                     [model_name_or_path], split
                 )
                 gen_data_collator.data_collator.pad_to_multiple_of = None
-                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate)
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate, model_args.load_method)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
                 generate_save_ola_data(
