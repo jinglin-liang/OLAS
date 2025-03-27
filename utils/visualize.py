@@ -28,7 +28,7 @@ def draw_attn_heatmap(input_map: torch.Tensor,
         show_array = input_map / (input_map.max(axis=1, keepdims=True) + 1e-10) 
     else:
         show_array = input_map
-    plt.title(title)
+    # plt.title(title)
     center = show_array.min() + 0.3 * (show_array.max() - show_array.min())
     ax = sns.heatmap(data=show_array, cmap='rainbow', center=center,
                      vmax=show_array.max(), vmin=show_array.min(), annot=False, 
@@ -44,8 +44,8 @@ def draw_attn_heatmap(input_map: torch.Tensor,
     #                 fontsize=annot_size, fontweight=fw)
     ax.set_xticklabels(ax.get_xticklabels(), fontsize=label_size)
     ax.set_yticklabels(ax.get_yticklabels(), fontsize=label_size)
-    plt.xlabel('K')
-    plt.ylabel('Q')
+    # plt.xlabel('K')
+    # plt.ylabel('Q')
 
 
 def visualize_attn_map(
@@ -54,11 +54,13 @@ def visualize_attn_map(
     text_list: List[str],
     output_dir: str,
     ola_augments: Optional[List[dict]] = None,
+    attn_type: str = 'ola',
     cutoff_len: int = 320,
     outliers_sigma_multiplier: float = 3.0,
     annot_size: int = 1,
     label_size: int = 3,
-    attn_type: str = 'ola'
+    attn_type: str = 'ola',
+    load_method: str = 'origin'
 ):
     ola_dict = {}
     ola_mask_dict = {}
@@ -73,6 +75,8 @@ def visualize_attn_map(
             remove_outliers=False,
             outliers_sigma_multiplier=outliers_sigma_multiplier,
             ola_augments=ola_augments,
+            attn_type=attn_type,
+            load_method=load_method
         ).train().cuda()
         model_dict[tmp_model_name] = tmp_model
         ola_list = []

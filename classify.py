@@ -309,10 +309,10 @@ if __name__ == "__main__":
     sentence_len = 50
     use_augment = True
     attn_type = 'ola'
-    lr = 0.001
- 
-    train_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_len{sentence_len}/{model_name}/train' for model_name in test_model_names]
+    lr = 0.003
+
+    train_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_random_all/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_random_all/{model_name}/train' for model_name in test_model_names]
     train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
     # print(train_dataset[0])

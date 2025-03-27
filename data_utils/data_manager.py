@@ -18,7 +18,8 @@ from data_utils.ola_dataset import (
     get_oladata_dir_path,
     OLADataset,
     OLADataset_conll2012,
-    ClassifyDataset
+    ClassifyDataset,
+    OLADataset_SemEvalRe
 )
 
 
@@ -34,7 +35,8 @@ class PartPaddingDataCollator:
         if keys_to_ignore is None:
             self.keys_to_ignore = [
                 "text", "token_pos_tags", "token_chunk_tags", "token_named_entities_tags",
-                "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola", "task"
+                "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola", "task",
+                "e1_s", "e1_e", "e2_s", "e2_e", "relation"
             ]
         else:
             self.keys_to_ignore = keys_to_ignore
@@ -70,6 +72,11 @@ class PartPaddingDataCollator:
                 [feature["ola"] for feature in features], 
                 batch["input_ids"].shape[1]
             )
+        if "e1_s" in batch.keys():
+            batch["e1_s"] = torch.LongTensor(batch["e1_s"])
+            batch["e1_e"] = torch.LongTensor(batch["e1_e"])
+            batch["e2_s"] = torch.LongTensor(batch["e2_s"])
+            batch["e2_e"] = torch.LongTensor(batch["e2_e"])
         batch["task"] = self.task
         return dict(batch)
 
@@ -126,6 +133,8 @@ class DataManager:
         if dataset_name in ["conll2012cn_pos", "conll2012cn_entity", "conll2012en_pos", "conll2012en_entity"]:
             kwargs["pos_tags_names"] = raw_train_data.features['sentences'][0]['pos_tags'].feature.names
             kwargs["named_entities_names"] = raw_train_data.features['sentences'][0]['named_entities'].feature.names
+        if dataset_name == "semeval_re":
+            kwargs["relation_names"] = raw_train_data.features["relation"].names
         
         if do_classify_data_generate:
             final_sentence_len = 50
@@ -173,6 +182,9 @@ class DataManager:
                 kwargs["language"] = "en"
                 kwargs["task"] = dataset_name.split("_")[-1]
                 self.data["train"][tmp_train_model] = OLADataset_conll2012(raw_train_data, **kwargs)
+            elif dataset_name == "semeval_re":
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                self.data["train"][tmp_train_model] = OLADataset_SemEvalRe(raw_train_data, **kwargs)
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 preprocess_func = functools.partial(
@@ -201,6 +213,9 @@ class DataManager:
                 kwargs["language"] = "en"
                 kwargs["task"] = dataset_name.split("_")[-1]
                 self.data["test"][tmp_test_model] = OLADataset_conll2012(raw_test_data, **kwargs)
+            elif dataset_name == "semeval_re":
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                self.data["test"][tmp_test_model] = OLADataset_SemEvalRe(raw_test_data, **kwargs)
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 preprocess_func = functools.partial(
@@ -236,7 +251,7 @@ class DataManager:
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=self.pad_to_multiple_of
             )
-        elif self.dataset_name == "imdb":
+        elif self.dataset_name in ["imdb", "semeval_re"]:
             base_data_collator = DataCollatorWithPadding(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",

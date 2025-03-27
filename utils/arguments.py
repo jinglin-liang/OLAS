@@ -81,6 +81,12 @@ class ModelArguments:
             "help": "Whether to only use local files and not download from the internet."
         },
     )
+    load_method: str = field(
+        default='origin',
+        metadata={
+            "help": "How to load the base model.choices=['origin', 'random_all', 'random_half', 'layer_disorder']"
+        },
+    )
     use_orders: List[int] = field(
         default_factory=lambda: [1, 2, 3],
         metadata={"help": "The orders of attention maps to use."},
@@ -303,6 +309,8 @@ class DataArguments:
                 self.num_classes = 37
             elif self.dataset_name == "conll2012en_entity":
                 self.num_classes = 37
+            elif self.dataset_name == "semeval_re":
+                self.num_classes = 19
             else:
                 raise ValueError(f"Dataset {self.dataset_name} is not supported.")
 

@@ -39,6 +39,51 @@ class AxialTransformerAdapter(nn.Module):
         x = x[:, :, idx_tensor, idx_tensor]
         x = x.transpose(1, 2).contiguous()
         return x
+    
+
+class AxialTransformerReAdapter(nn.Module):
+    def  __init__(
+        self,
+        in_channels=3,
+        out_channels=3,
+        hidden_size=768,
+        axial_tf_layers=5,
+        heads=8,
+        reversible=True,
+        **kwargs
+    ):
+        super().__init__()
+        self.input_conv = nn.Conv2d(in_channels, hidden_size, 1)
+        self.output_fc = nn.Sequential(
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(hidden_size * 2, out_channels)
+        )
+        self.transformer = AxialImageTransformer(
+            dim = hidden_size,
+            depth = axial_tf_layers,
+            heads = heads,
+            reversible = reversible
+        )
+
+    def forward(self, x, e1_s, e1_e, e2_s, e2_e):
+        # input x to axial transformer
+        x = self.input_conv(x)
+        x = self.transformer(x)
+        # from diagonal to sequence
+        idx_tensor = torch.arange(x.size(-1)).to(x.device)
+        x = x[:, :, idx_tensor, idx_tensor]
+        x = x.transpose(1, 2).contiguous()
+        # get entity embeddings
+        e1_emb, e2_emb = [], []
+        for bs_idx in range(x.size(0)):
+            e1_emb.append(x[bs_idx, e1_s[bs_idx]:e1_e[bs_idx], :].mean(dim=0))
+            e2_emb.append(x[bs_idx, e2_s[bs_idx]:e2_e[bs_idx], :].mean(dim=0))
+        e1_emb = torch.stack(e1_emb)
+        e2_emb = torch.stack(e2_emb)
+        # get relation
+        es = torch.cat([e1_emb, e2_emb], dim=-1)
+        r = self.output_fc(es)
+        return r
 
 
 class AxialTransformerRnnAdapter(nn.Module):

@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, get_flow_attention, get_alti_attention, get_rolloutplus_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet, AxialTransformerReAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
@@ -85,16 +85,17 @@ class OLAModel(nn.Module):
         abandom_base_lm: bool = False,
         ola_augments: Optional[List[Dict]] = None,
         attn_type: str = "ola",
+        load_method: str = "origin",
         **kwargs,
     ):
         super(OLAModel, self).__init__()
-        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm, attn_type)
+        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm, attn_type, load_method)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
                                use_orders, remove_outliers, outliers_sigma_multiplier, attn_type, **kwargs)
         self._init_learnable_params()
         self._init_ola_augmentation(ola_augments)
 
-    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm, attn_type):
+    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm, attn_type, load_method):
         self.base_model_name_list = base_model_name_list
         self.all_tokenizer = {}
         is_casual_list = []
@@ -113,26 +114,54 @@ class OLAModel(nn.Module):
             tmp_tokenizer.padding_side = "left"  # Allow batched inference
             self.all_tokenizer[tmp_model_name] = tmp_tokenizer
             if len(base_model_name_list) == 1 and not abandom_base_lm:
-                # load base model
-                if config.model_type == 'deberta-v2':
-                    self.base_model = DebertaV2Model.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
-                elif config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
-                    self.base_model = BertModel.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
-                else:
+                if load_method in ["origin", "layer_disorder"]:
+                    # load base model
+                    if config.model_type == 'deberta-v2':
+                        self.base_model = DebertaV2Model.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    elif config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
+                        self.base_model = BertModel.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    else:
+                        model_class = getattr(__import__('transformers'), config.architectures[0])
+                        self.base_model = model_class.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    if load_method == "layer_disorder":
+                        if config.model_type == 'bert':
+                            encoder_layers = self.base_model.bert.encoder.layer
+                        elif config.model_type == 'roberta':
+                            encoder_layers = self.base_model.roberta.encoder.layer
+                        elif config.model_type == 'electra':
+                            encoder_layers = self.base_model.electra.encoder.layer
+                        num_layers = len(encoder_layers)
+                        # 获取所有层的权重参数
+                        layer_weights = []
+                        for i in range(num_layers):
+                            layer_params = {}
+                            for name, param in encoder_layers[i].named_parameters():
+                                layer_params[name] = param.data.clone() # 克隆以避免直接修改原始数据
+                            layer_weights.append(layer_params)
+
+                        import random
+                        random.shuffle(layer_weights)
+
+                        # 将打乱后的权重重新赋值给模型
+                        for i in range(num_layers):
+                            for name, param in encoder_layers[i].named_parameters():
+                                if name in layer_weights[i]:
+                                    param.data.copy_(layer_weights[i][name])
+                elif load_method in ["random_all", "random_half"]:
                     model_class = getattr(__import__('transformers'), config.architectures[0])
-                    self.base_model = model_class.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
+                    self.base_model = model_class(config)
                 if attn_type in ["alti", "rolloutplus"]:
                     self.wrapped_model = ModelWrapper(self.base_model)
                 if attn_type in ["grad", "grad_input", "ig"]:
@@ -170,6 +199,8 @@ class OLAModel(nn.Module):
             self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes, **kwargs)
         elif adapter_architecture == "tokencls_unet":
             self.adaptor = UNet(ola_input_channal, num_classes, **kwargs)
+        elif adapter_architecture == "re_axialtranformer":
+            self.adaptor = AxialTransformerReAdapter(ola_input_channal, num_classes, **kwargs)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -225,6 +256,10 @@ class OLAModel(nn.Module):
         output_tandem: Optional[bool] = False,
         do_vis: bool = False,
         calc_flop: bool = False,
+        e1_s: Optional[torch.LongTensor] = None,
+        e1_e: Optional[torch.LongTensor] = None,
+        e2_s: Optional[torch.LongTensor] = None,
+        e2_e: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[OLALMOutput]:
         assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
@@ -234,6 +269,11 @@ class OLAModel(nn.Module):
         attention_mask = attention_mask.to(self.device)
         if labels is not None:
             labels = labels.to(self.device)
+        if e1_s is not None:
+            e1_s = e1_s.to(self.device)
+            e1_e = e1_e.to(self.device)
+            e2_s = e2_s.to(self.device)
+            e2_e = e2_e.to(self.device)
         # calculate attn map
         if attn is None:
             # base model forward
@@ -295,8 +335,8 @@ class OLAModel(nn.Module):
                 )
                 if input_ids.shape[-1] == 1:
                     attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
-            elif attn_type == "grad":
-                grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
+            # elif attn_type == "grad":
+            #     grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
@@ -347,6 +387,21 @@ class OLAModel(nn.Module):
                     loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
                     loss_weight = torch.ones_like(labels.view(-1)) - 0.5 * (labels.view(-1) == 0)
                     loss = torch.mean(loss * loss_weight)
+            else:
+                loss = None
+        elif "re" in self.adapter_architecture:
+            # preprocess e1_s, e1_e, e2_s, e2_e
+            pad_num = (attention_mask == 0).sum(-1)
+            e1_e += pad_num
+            e1_s += pad_num
+            e2_e += pad_num
+            e2_s += pad_num
+            # adaptor forward
+            prediction_scores = self.adaptor(stack_attn_tensor, e1_s, e1_e, e2_s, e2_e)
+            # calculate loss
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(prediction_scores, labels)
             else:
                 loss = None
         else:
