@@ -7,6 +7,7 @@ models:
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
     ln_before_residual: 'False'
+    model_type: 'mlm'
   roberta:
     layer: 'roberta.encoder.layer'
     ln1: 'attention.output.LayerNorm'
@@ -15,6 +16,7 @@ models:
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
     ln_before_residual: 'False'
+    model_type: 'mlm'
   electra:
     layer: 'electra.encoder.layer'
     ln1: 'attention.output.LayerNorm'
@@ -23,6 +25,7 @@ models:
     dense: 'attention.output.dense'
     pre_layer_norm: 'False'
     ln_before_residual: 'False'
+    model_type: 'mlm'
   qwen2:
     layer: 'model.layers'
     ln1: 'input_layernorm'
@@ -30,13 +33,17 @@ models:
     values: 'self_attn.v_proj'
     dense: 'self_attn.o_proj'
     pre_layer_norm: 'True'
+    ln_before_residual: 'False'
+    model_type: 'clm'
   gemma2:
     layer: 'model.layers'
-    ln1: 'input_layernorm'
-    ln2: 'post_attention_layernorm'
+    ln1: 'post_attention_layernorm'
+    ln2: 'pre_feedforward_layernorm'
     values: 'self_attn.v_proj'
     dense: 'self_attn.o_proj'
     pre_layer_norm: 'True'
+    ln_before_residual: 'True'
+    model_type: 'clm'
   llama:
     layer: 'model.layers'
     ln1: 'input_layernorm'
@@ -44,6 +51,8 @@ models:
     values: 'self_attn.v_proj'
     dense: 'self_attn.o_proj'
     pre_layer_norm: 'True'
+    ln_before_residual: 'False'
+    model_type: 'clm'
   distilbert:
     layer: 'distilbert.transformer.layer'
     ln1: 'sa_layer_norm'
@@ -51,3 +60,5 @@ models:
     values: 'attention.v_lin'
     dense: 'attention.out_lin'
     pre_layer_norm: 'False'
+    ln_before_residual: 'False'
+    model_type: 'mlm'

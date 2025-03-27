@@ -233,7 +233,7 @@ class ClassifyDataset(Dataset):
             attn, attn_mask, 
             remove_outliers=self.remove_outliers, 
             is_casual=self.is_casual,
-            origin=False
+            result_type='rm_ol'
         )
         stack_attn_tensor = self.transform(stack_attn_tensor)[0]
         return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model']}
@@ -299,8 +299,9 @@ if __name__ == "__main__":
     setup_seed(2025)
 
     ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    train_model_ids = [3,4,5,6]
-    test_model_ids = [1,2]
+    # ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
+    train_model_ids = [1,2,5,6]
+    test_model_ids = [3,4]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
     selected_orders = [1]

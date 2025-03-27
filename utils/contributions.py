@@ -37,10 +37,21 @@ class ModelWrapper(nn.Module):
         self.model = model
 
         self.modules_config = config['models'][model.config.model_type]
+        self.model_type = self.modules_config['model_type']
 
-        self.num_attention_heads = self.model.config.num_attention_heads
-        self.attention_head_size = int(self.model.config.hidden_size / self.model.config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        if self.modules_config['model_type'] == 'mlm':
+            self.num_attention_heads = self.model.config.num_attention_heads
+            self.attention_head_size = int(self.model.config.hidden_size / self.model.config.num_attention_heads)
+            self.all_head_size = self.num_attention_heads * self.attention_head_size
+        elif self.modules_config['model_type'] == 'clm':
+            self.num_attention_heads = self.model.config.num_attention_heads
+            try:
+                self.attention_head_size = self.model.config.head_dim
+            except:
+                self.attention_head_size = self.model.config.hidden_size // self.model.config.num_attention_heads
+            self.num_key_value_heads = self.model.config.num_key_value_heads
+            self.all_head_size = self.model.config.hidden_size
+            self.n_rep = self.model.config.num_attention_heads // self.model.config.num_key_value_heads
 
     def save_activation(self,name, mod, inp, out):
         self.func_inputs[name].append(inp)
@@ -50,10 +61,17 @@ class ModelWrapper(nn.Module):
         for k, v in self.handles.items():
             self.handles[k].remove()
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    def transpose_for_scores(self, x, model_type):
+        if model_type == 'mlm':
+            new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+            x = x.view(*new_x_shape)
+            return x.permute(0, 2, 1, 3)
+        elif model_type == 'clm':
+            new_x_shape = x.size()[:-1] + (self.num_key_value_heads, self.attention_head_size)
+            x = x.view(*new_x_shape).transpose(1, 2)
+            batch, num_key_value_heads, slen, head_dim = x.shape
+            x = x[:, :, None, :, :].expand(batch, num_key_value_heads, self.n_rep, slen, head_dim)
+            return x.reshape(batch, num_key_value_heads * self.n_rep, slen, head_dim)
 
     def get_model_info(self):
         ln1_name = self.modules_config['ln1']
@@ -141,7 +159,7 @@ class ModelWrapper(nn.Module):
             #   LayerNorm: nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             #   pre_ln_states: Vectors just before LayerNorm (batch, seq_length, all_head_size)
 
-            value_layer = self.transpose_for_scores(func_outputs[model_layer_name + '.' + str(layer) + '.' + values_name][0])
+            value_layer = self.transpose_for_scores(func_outputs[model_layer_name + '.' + str(layer) + '.' + values_name][0], self.model_type)
             
             dense = get_module(self.model, dense_name, layer, model_layer_name)
             ln1 = get_module(self.model, ln1_name, layer, model_layer_name)
@@ -151,7 +169,10 @@ class ModelWrapper(nn.Module):
             pre_ln2_states = func_inputs[model_layer_name + '.' + str(layer) + '.' + ln2_name][0][0]
             if pre_ln2_states.dim() == 2:
                 pre_ln2_states = pre_ln2_states.unsqueeze(0)
-            post_LayerNorm_FFN = func_outputs[model_layer_name + '.' + str(layer) + '.' + ln2_name][0]
+            if self.model_type == 'mlm':
+                post_LayerNorm_FFN = func_outputs[model_layer_name + '.' + str(layer) + '.' + ln2_name][0]
+            elif self.model_type == 'clm':
+                post_LayerNorm_FFN = func_outputs[model_layer_name + '.' + str(layer)][0][0]
             if post_LayerNorm_FFN.dim() == 2:
                 post_LayerNorm_FFN = post_LayerNorm_FFN.unsqueeze(0)
             
@@ -176,7 +197,7 @@ class ModelWrapper(nn.Module):
             device = hidden_states.device
             residual = torch.einsum('sk,bsd->bskd', torch.eye(hidden_shape[1]).to(device), hidden_states)
             
-            if ln_before_residual == False:
+            if self.model_type == 'mlm':
                 # AVW_O + residual vectors -> (batch,seq_len,seq_len,embed_dim)
                 residual_weighted_layer = summed_weighted_layer + residual
                 
@@ -206,47 +227,38 @@ class ModelWrapper(nn.Module):
                 else:
                     transformed_vectors = residual_weighted_layer
                     
-            else:
-                @torch.no_grad()
-                def l_transform(x, w_ln):
-                    '''Computes mean and performs hadamard product with ln weight (w_ln) as a linear transformation.'''
-                    ln_param_transf = torch.diag(w_ln)
-                    ln_mean_transf = torch.eye(w_ln.size(0)).to(w_ln.device) - \
-                        1 / w_ln.size(0) * torch.ones_like(ln_param_transf).to(w_ln.device)
+                # Output vectors 1 per source token
+                attn_output = transformed_vectors.sum(dim=2)
 
-                    out = torch.einsum(
-                        '... e , e f , f g -> ... g',
-                        x,
-                        ln_mean_transf,
-                        ln_param_transf
-                    )
-                    return out
-
-                # LN 1
-                ln1_weight = ln1.weight.data
-                ln1_eps = ln1.eps
-                ln1_bias = ln1.bias
-
-                # Transformed vectors T_i(x_j)
-                transformed_vectors = l_transform(summed_weighted_layer, ln1_weight)  
+                if pre_layer_norm == False:
+                    # Lb_O
+                    dense_bias_term = l_transform(dense_bias, ln1_weight)
+                    # y_i
+                    ln_std_coef = 1/(pre_ln_states + ln1_eps).std(-1, unbiased=False).view(1, -1, 1)
+                    resultant = (attn_output + dense_bias_term)*ln_std_coef + ln1_bias
+                    transformed_vectors_std = l_transform(residual_weighted_layer, ln1_weight)*ln_std_coef.unsqueeze(-1)
+                    real_resultant = post_ln_states
+                else:
+                    dense_bias_term = dense_bias
+                    resultant = attn_output + dense_bias_term
+                    transformed_vectors_std = transformed_vectors
+                    real_resultant = pre_ln2_states
                     
-                # AVW_O + residual vectors -> (batch,seq_len,seq_len,embed_dim)
-                transformed_vectors = transformed_vectors + residual
+            elif self.model_type == 'clm':
+                # Transformed vectors T_i(x_j)
+                if not ln_before_residual:
+                    transformed_vectors = summed_weighted_layer + residual
+                else:
+                    ln1_weight = ln1.weight.data
+                    ln1_eps = ln1.eps
+                    # ln_std_coef = 1 / ((pre_ln_states).pow(2).mean(dim=-1) + ln1_eps).sqrt().view(1, -1, 1)
+                    ln_std_coef = torch.rsqrt(pre_ln_states.pow(2).mean(-1, keepdim=True) + ln1_eps)
+                    transformed_vectors = summed_weighted_layer * ln_std_coef[:,:,None,:] * (1.0 + ln1_weight[None, None, None,:].float())+ residual
 
-            # Output vectors 1 per source token
-            attn_output = transformed_vectors.sum(dim=2)
+                # Output vectors 1 per source token
+                resultant = transformed_vectors.sum(dim=2)
 
-            if pre_layer_norm == False:
-                # Lb_O
-                dense_bias_term = l_transform(dense_bias, ln1_weight)
                 # y_i
-                ln_std_coef = 1/(pre_ln_states + ln1_eps).std(-1, unbiased=False).view(1, -1, 1)
-                resultant = (attn_output + dense_bias_term)*ln_std_coef + ln1_bias
-                transformed_vectors_std = l_transform(residual_weighted_layer, ln1_weight)*ln_std_coef.unsqueeze(-1)
-                real_resultant = post_ln_states
-            else:
-                dense_bias_term = dense_bias
-                resultant = attn_output + dense_bias_term
                 transformed_vectors_std = transformed_vectors
                 real_resultant = pre_ln2_states
                 
@@ -270,13 +282,17 @@ class ModelWrapper(nn.Module):
 
             ############################
             # LN 2
-            ln2_weight = ln2.weight.data
-            ln2_eps = ln2.eps
-            ln2_bias = ln2.bias
+            if self.model_type == 'mlm':
+                ln2_weight = ln2.weight.data
+                ln2_eps = ln2.eps
+                ln2_bias = ln2.bias
 
-            ln2_std_coef = 1/(pre_ln2_states + ln2_eps).std(-1, unbiased=False).view(1, -1, 1) # (batch,seq_len,1)
-            transformed_vectors_std2 = l_transform(transformed_vectors_std, ln2_weight)*ln2_std_coef.unsqueeze(-1)
-            resultant2 = post_LayerNorm_FFN
+                ln2_std_coef = 1/(pre_ln2_states + ln2_eps).std(-1, unbiased=False).view(1, -1, 1) # (batch,seq_len,1)
+                transformed_vectors_std2 = l_transform(transformed_vectors_std, ln2_weight)*ln2_std_coef.unsqueeze(-1)
+                resultant2 = post_LayerNorm_FFN
+            elif self.model_type == 'clm':
+                transformed_vectors_std2 = transformed_vectors_std
+                resultant2 = post_LayerNorm_FFN
 
             transformed_vectors_norm_std2 = torch.norm(transformed_vectors_std2, dim=-1) # (batch, seq_len, seq_len)
 

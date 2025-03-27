@@ -72,7 +72,10 @@ def generate_save_ola_data(
     bar = tqdm(dataloader, desc="Generating OLA data")
     cnt = 0
     cache = {}
-    for data in bar:
+    for didx, data in enumerate(bar):
+        
+        if didx <28:
+            continue
         if data["input_ids"].shape[-1] == 0:
             continue
         with torch.no_grad():
@@ -100,6 +103,8 @@ def generate_save_ola_data(
         if cnt % 400 == 0:
             write_cache(env, cache)
             cache = {}
+        del output, attn
+        torch.cuda.empty_cache()
         # if cnt == 20:
         #     break
     cache["num_samples".encode('utf-8')] = str(cnt).encode("utf-8")
@@ -229,7 +234,7 @@ class ClassifyDataset:
         # self.named_entities_names = named_entities_names
         self.data = []
         id = -1
-        for sentence in sentences:
+        for sidx, sentence in enumerate(sentences):
             id += 1
             tokens = sentence
             # pos_tags = sentence["pos_tags"]
@@ -303,6 +308,92 @@ class ClassifyDataset:
                 "text": text,
                 "labels": labels,
             })
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+    
+
+class OLADataset_SemEvalRe:
+    def __init__(self, raw_train_data, tokenizer, cutoff_len, relation_names, **kwargs) -> None:
+        self.data = []
+        pbar = tqdm(range(len(raw_train_data)), desc="Processing data")
+        for i in pbar:
+            data_point = self._standize_function(raw_train_data[i], tokenizer, cutoff_len, relation_names, **kwargs)
+            if data_point is not None:
+                self.data.append(data_point)
+            pbar.set_postfix({"valided datas": len(self.data)})
+    
+    def _standize_function(self, data_point, tokenizer, cutoff_len, relation_names, **kwargs):
+        e1_s, e1_e, e2_s, e2_e = None, None, None, None
+        tokens = data_point['sentence'].replace("<e1>", " <e1> ").replace("</e1>", " </e1> ").replace("<e2>", " <e2> ").replace("</e2>", " </e2> ").split(" ")
+        tokens = [tmp for tmp in tokens if len(tmp) > 0]
+        test_tokeizer = tokenizer("test")
+        all_special_tokens = [v for _, v in tokenizer.special_tokens_map.items()]
+        need_bos_token = tokenizer.decode(test_tokeizer["input_ids"][0]) in all_special_tokens
+        need_eos_token = tokenizer.decode(test_tokeizer["input_ids"][-1]) in all_special_tokens
+        bos_token_id = test_tokeizer["input_ids"][0] if need_bos_token else None
+        eos_token_id = test_tokeizer["input_ids"][-1] if need_eos_token else None
+        input_ids = []
+        attention_mask = []
+        if need_bos_token:
+            input_ids.append(bos_token_id)
+            attention_mask.append(1)
+        for tmp_idx, tmp_word in enumerate(tokens):
+            # add " " to tmp_word to avoid LM such as GPT2 to ignore the space
+            if tmp_idx > 0:
+                tmp_word = " " + tmp_word
+            if hasattr(tokenizer, "vocab_file") and "Yi-1.5" in tokenizer.vocab_file:
+                tmp_word = tmp_word.lstrip(" ")
+            if "<e1>" in tokens[tmp_idx]:
+                e1_s = len(input_ids)
+                continue
+            if "<e2>" in tokens[tmp_idx]:
+                e2_s = len(input_ids)
+                continue
+            if "</e1>" in tokens[tmp_idx]:
+                e1_e = len(input_ids)
+                continue
+            if "</e2>" in tokens[tmp_idx]:
+                e2_e = len(input_ids)
+                continue
+            tokenized_word = tokenizer(
+                tmp_word,
+                truncation=True,
+                max_length=cutoff_len,
+                padding=False,
+                return_tensors=None,
+            )
+            start_idx = int(need_bos_token)
+            end_idx = len(tokenized_word["input_ids"]) - int(need_eos_token)
+            tmp_input_id = tokenized_word["input_ids"][start_idx:end_idx]
+            tmp_attention_mask = tokenized_word["attention_mask"][start_idx:end_idx]
+            input_ids += tmp_input_id
+            attention_mask += tmp_attention_mask
+            if len(input_ids) + int(need_bos_token) >= cutoff_len:
+                end_idx = cutoff_len - int(need_bos_token)
+                input_ids = input_ids[:end_idx]
+                attention_mask = attention_mask[:end_idx]
+                break
+        if need_eos_token:
+            input_ids.append(eos_token_id)
+            attention_mask.append(1)
+        if (e1_s is None) or (e1_e is None) or (e2_s is None) or (e2_e is None) or \
+              (e1_e > len(input_ids)) or (e2_e > len(input_ids)):
+            return None
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": data_point["relation"],
+            "relation": relation_names[data_point["relation"]],
+            "text": data_point['sentence'],
+            "e1_s": e1_s,
+            "e1_e": e1_e,
+            "e2_s": e2_s,
+            "e2_e": e2_e,
+        }
 
     def __len__(self):
         return len(self.data)

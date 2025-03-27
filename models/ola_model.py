@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, get_flow_attention, get_alti_attention, get_rolloutplus_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet, AxialTransformerReAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
@@ -29,15 +29,18 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 
-def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False, origin=True):
+def preprocess_ola(ola, ola_mask, remove_outliers=False, regularize=True, is_casual=False, result_type='cat'):
+    assert result_type in ['cat', 'origin', 'rm_ol']
     stack_ola_tensor = torch.cat([v for _, v in ola.items()], dim=1)
     if remove_outliers:
         outliers_mask = ola_mask["outliers_mask"]
         outliers_mask_tensor = torch.cat([v for _, v in outliers_mask.items()], dim=1)
         stack_ola_tensor_wo_ol = stack_ola_tensor * (1 - outliers_mask_tensor)
-        if origin:
+        if result_type == 'cat':
             stack_ola_tensor = torch.cat([stack_ola_tensor, stack_ola_tensor_wo_ol], dim=1)
-        else:
+        elif result_type == 'origin':
+            stack_ola_tensor = stack_ola_tensor
+        elif result_type == 'rm_ol':
             stack_ola_tensor = stack_ola_tensor_wo_ol
     if regularize:
         stack_ola_tensor = stack_ola_tensor / (stack_ola_tensor.sum(dim=-1, keepdim=True) + 1e-10)
@@ -196,6 +199,8 @@ class OLAModel(nn.Module):
             self.adaptor = AxialTransformerRnnAdapter(ola_input_channal, num_classes, **kwargs)
         elif adapter_architecture == "tokencls_unet":
             self.adaptor = UNet(ola_input_channal, num_classes, **kwargs)
+        elif adapter_architecture == "re_axialtranformer":
+            self.adaptor = AxialTransformerReAdapter(ola_input_channal, num_classes, **kwargs)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -250,6 +255,10 @@ class OLAModel(nn.Module):
         attn_type: str = "ola",
         output_tandem: Optional[bool] = False,
         do_vis: bool = False,
+        e1_s: Optional[torch.LongTensor] = None,
+        e1_e: Optional[torch.LongTensor] = None,
+        e2_s: Optional[torch.LongTensor] = None,
+        e2_e: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[OLALMOutput]:
         assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
@@ -259,6 +268,11 @@ class OLAModel(nn.Module):
         attention_mask = attention_mask.to(self.device)
         if labels is not None:
             labels = labels.to(self.device)
+        if e1_s is not None:
+            e1_s = e1_s.to(self.device)
+            e1_e = e1_e.to(self.device)
+            e2_s = e2_s.to(self.device)
+            e2_e = e2_e.to(self.device)
         # calculate attn map
         if attn is None:
             # base model forward
@@ -309,14 +323,19 @@ class OLAModel(nn.Module):
                 attn = get_rolloutplus_attention(
                     attentions, contributions_data
                 )
+                if input_ids.shape[-1] == 1:
+                    attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
             elif attn_type == "alti":
                 tmp_b = {'input_ids': input_ids, 'attention_mask': attention_mask, 'position_ids': position_ids, 'labels': None}
-                hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
+                with torch.no_grad():
+                    hidden_states, attentions, contributions_data = self.wrapped_model(tmp_b)
                 attn = get_alti_attention(
                     attentions, contributions_data
                 )
-            elif attn_type == "grad":
-                grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
+                if input_ids.shape[-1] == 1:
+                    attn[1] = attn[1].unsqueeze(0).unsqueeze(0)
+            # elif attn_type == "grad":
+            #     grad_attributions = interpret_sentence(self.wrapped_model, tokenizer, input_ids, 'grad', target_idx)
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
@@ -365,6 +384,21 @@ class OLAModel(nn.Module):
                     loss = loss_fct(prediction_scores.view(-1, self.num_classes), labels.view(-1))
                     loss_weight = torch.ones_like(labels.view(-1)) - 0.5 * (labels.view(-1) == 0)
                     loss = torch.mean(loss * loss_weight)
+            else:
+                loss = None
+        elif "re" in self.adapter_architecture:
+            # preprocess e1_s, e1_e, e2_s, e2_e
+            pad_num = (attention_mask == 0).sum(-1)
+            e1_e += pad_num
+            e1_s += pad_num
+            e2_e += pad_num
+            e2_s += pad_num
+            # adaptor forward
+            prediction_scores = self.adaptor(stack_attn_tensor, e1_s, e1_e, e2_s, e2_e)
+            # calculate loss
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                loss = loss_fct(prediction_scores, labels)
             else:
                 loss = None
         else:
