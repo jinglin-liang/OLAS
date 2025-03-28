@@ -138,12 +138,14 @@ class DataManager:
         
         if do_classify_data_generate:
             final_sentence_len = 50
-            print("per sentence len=", final_sentence_len)
+            sentence_num = 2000
+            print(f"per sentence len={final_sentence_len}, sentence_num={sentence_num}")
             use_generated_classify_data = True
             assert dataset_name == "conll2012en_entity"
             if use_generated_classify_data:
-                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}.json', 'r') as f:
+                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'r') as f:
                     final_sentences = json.load(f)
+                final_sentences = final_sentences[:sentence_num]
             else:
                 final_sentences = []
                 for document_id in range(raw_train_data.__len__()):
@@ -153,12 +155,13 @@ class DataManager:
                         if len(tmp_doc_words) >= final_sentence_len:
                             final_sentences.append(tmp_doc_words[:final_sentence_len])
                             tmp_doc_words = []
-                        if len(final_sentences) >= 1000:
+                        if len(final_sentences) >= sentence_num:
                             break
-                final_sentences = final_sentences[:1000]
+                final_sentences = final_sentences[:sentence_num]
                 print("final sentence num =", len(final_sentences))
-                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}.json', 'w') as f:
+                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
                     json.dump(final_sentences, f)
+                print("save final sentences done")
 
         for tmp_train_model in train_model_name_or_paths:
             if self.use_generated_oladata:

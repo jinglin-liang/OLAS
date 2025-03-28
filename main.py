@@ -236,19 +236,19 @@ def main():
                 save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate, model_args.load_method)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
-                # generate_save_ola_data(
-                #     model,
-                #     gen_dataset,
-                #     gen_data_collator,
-                #     save_dir,
-                #     data_args.attn_type
-                # )
-                calc_flop(
+                generate_save_ola_data(
                     model,
                     gen_dataset,
                     gen_data_collator,
+                    save_dir,
                     data_args.attn_type
                 )
+                # calc_flop(
+                #     model,
+                #     gen_dataset,
+                #     gen_data_collator,
+                #     data_args.attn_type
+                # )
             # Explicitly delete the model and clear cache
             del model
             torch.cuda.empty_cache()

@@ -142,6 +142,12 @@ class OLAModel(nn.Module):
                             encoder_layers = self.base_model.roberta.encoder.layer
                         elif config.model_type == 'electra':
                             encoder_layers = self.base_model.electra.encoder.layer
+                        elif config.model_type == 'qwen2':
+                            encoder_layers = self.base_model.model.layers
+                        elif config.model_type == 'gemma2':
+                            encoder_layers = self.base_model.model.layers
+                        elif config.model_type == 'llama':
+                            encoder_layers = self.base_model.model.layers
                         num_layers = len(encoder_layers)
                         # 获取所有层的权重参数
                         layer_weights = []
