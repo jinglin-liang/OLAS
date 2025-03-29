@@ -289,6 +289,14 @@ class DataArguments:
         default=False,
         metadata={"help": "Whether to do classify data generate."},
     )
+    classify_sentence_len: int = field(
+        default=50,
+        metadata={"help": "The length of the data for classification."},
+    )
+    classify_sentence_num: int = field(
+        default=2000,
+        metadata={"help": "The number of the data for classification."},
+    )
 
     def __post_init__(self):
         if self.num_classes is None:

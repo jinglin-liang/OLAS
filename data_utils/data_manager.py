@@ -91,7 +91,9 @@ class DataManager:
         use_generated_oladata: bool = False,
         attn_type: str = "ola",
         pad_to_multiple_of: int = 8,
-        do_classify_data_generate: bool = False
+        do_classify_data_generate: bool = False,
+        classify_sentence_len: int = 50,
+        classify_sentence_num: int = 2000
     ) -> None:
         self.dataset_name = dataset_name
         self.cutoff_len = cutoff_len
@@ -137,30 +139,52 @@ class DataManager:
             kwargs["relation_names"] = raw_train_data.features["relation"].names
         
         if do_classify_data_generate:
-            final_sentence_len = 50
-            sentence_num = 2000
+            final_sentence_len = classify_sentence_len
+            sentence_num = classify_sentence_num
             print(f"per sentence len={final_sentence_len}, sentence_num={sentence_num}")
             use_generated_classify_data = True
-            assert dataset_name == "conll2012en_entity"
+            assert dataset_name in ["conll2012en_entity", "imdb"]
             if use_generated_classify_data:
-                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'r') as f:
+                if dataset_name == "conll2012en_entity":
+                    file_name = "conll2012_classify_sentences"
+                elif dataset_name == "imdb":
+                    file_name = "imdb_classify_sentences"
+                else:
+                    raise NotImplementedError
+                with open(f'datasets/{file_name}/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'r') as f:
                     final_sentences = json.load(f)
                 final_sentences = final_sentences[:sentence_num]
             else:
                 final_sentences = []
-                for document_id in range(raw_train_data.__len__()):
-                    tmp_doc_words = []
-                    for sentence_id in range(len(raw_train_data[document_id]['sentences'])):
-                        tmp_doc_words.extend(raw_train_data[document_id]['sentences'][sentence_id]['words'])
-                        if len(tmp_doc_words) >= final_sentence_len:
+                if dataset_name == "conll2012en_entity":
+                    for document_id in range(raw_train_data.__len__()):
+                        tmp_doc_words = []
+                        for sentence_id in range(len(raw_train_data[document_id]['sentences'])):
+                            tmp_doc_words.extend(raw_train_data[document_id]['sentences'][sentence_id]['words'])
+                            if len(tmp_doc_words) >= final_sentence_len:
+                                final_sentences.append(tmp_doc_words[:final_sentence_len])
+                                tmp_doc_words = []
+                            if len(final_sentences) >= sentence_num:
+                                break
+                    final_sentences = final_sentences[:sentence_num]
+                    print("final sentence num =", len(final_sentences))
+                    with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
+                        json.dump(final_sentences, f)
+                elif dataset_name == 'imdb':
+                    for data in raw_train_data:
+                        tmp_doc_words = data['text'].split()
+                        if len(tmp_doc_words) >= final_sentence_len and len(tmp_doc_words) < (final_sentence_len + 10):
+                            final_sentences.append(tmp_doc_words)
+                        elif len(tmp_doc_words) >= (final_sentence_len + 10):
                             final_sentences.append(tmp_doc_words[:final_sentence_len])
-                            tmp_doc_words = []
                         if len(final_sentences) >= sentence_num:
                             break
-                final_sentences = final_sentences[:sentence_num]
-                print("final sentence num =", len(final_sentences))
-                with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
-                    json.dump(final_sentences, f)
+                        final_sentences = final_sentences[:sentence_num]
+                    print("final sentence num =", len(final_sentences))
+                    with open(f'datasets/imdb_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
+                        json.dump(final_sentences, f)
+                else:
+                    raise NotImplementedError
                 print("save final sentences done")
 
         for tmp_train_model in train_model_name_or_paths:

@@ -1,5 +1,6 @@
 from typing import Tuple, Optional, Union, List, Dict
 from dataclasses import dataclass
+import random
 
 import torch
 import torch.nn as nn
@@ -149,18 +150,15 @@ class OLAModel(nn.Module):
                         elif config.model_type == 'llama':
                             encoder_layers = self.base_model.model.layers
                         num_layers = len(encoder_layers)
-                        # 获取所有层的权重参数
                         layer_weights = []
                         for i in range(num_layers):
                             layer_params = {}
                             for name, param in encoder_layers[i].named_parameters():
-                                layer_params[name] = param.data.clone() # 克隆以避免直接修改原始数据
+                                layer_params[name] = param.data.clone()
                             layer_weights.append(layer_params)
 
-                        import random
                         random.shuffle(layer_weights)
 
-                        # 将打乱后的权重重新赋值给模型
                         for i in range(num_layers):
                             for name, param in encoder_layers[i].named_parameters():
                                 if name in layer_weights[i]:

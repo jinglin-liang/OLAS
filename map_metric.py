@@ -149,47 +149,50 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
-    model1_name = ams[5]
-    model2_name = ams[3]
-    selected_orders = [1]
-    sentence_len = 50
-    use_augment = False
-    attn_type = 'ola'
+    model_pairs = [(1,3), (3,1), (1,5), (5,1), (3,5), (5,3)]
+    for model_pair in model_pairs:
+        # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
+        ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
+        model1_name = ams[model_pair[0]]
+        model2_name = ams[model_pair[1]]
+        selected_orders = [1]
+        sentence_len = 50
+        use_augment = False
+        attn_type = 'ola'
 
-    data_dir_path1 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50/{model1_name}/train']
-    data_dir_path2 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50/{model2_name}/train']
-    dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
-    dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+        data_dir_path1 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model1_name}/train']
+        data_dir_path2 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model2_name}/train']
+        dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+        dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+        print(f"dataset1_len = {len(dataset1)}, dataset2_len = {len(dataset2)}")
 
-    metric_name = 'ssim'
-    if metric_name == 'ssim':
-        metric = StructuralSimilarityIndexMeasure().to('cuda')
-    elif metric_name == 'psnr':
-        metric = PeakSignalNoiseRatio().to('cuda')
+        metric_name = 'ssim'
+        if metric_name == 'ssim':
+            metric = StructuralSimilarityIndexMeasure().to('cuda')
+        elif metric_name == 'psnr':
+            metric = PeakSignalNoiseRatio().to('cuda')
 
-    hit_num = [1, 3, 5]
-    acc = {f"hit@{hit}":0 for hit in hit_num}
-    print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num}")
-    bar = tqdm(enumerate(dataset1), desc='datas')
-    for idx1, data1 in bar:
-        metric_value_list = []
-        for idx2, data2 in enumerate(dataset2):
-            attn1, attn2 = data1['attn_map'].unsqueeze(0).to('cuda'), data2['attn_map'].unsqueeze(0).to('cuda')
-            metric_value = metric(attn1, attn2).item()
-            metric_value_list.append(metric_value)
-        target_value = metric_value_list[idx1]
-        sorted_list = sorted(metric_value_list, reverse=True)
-        target_pos = sorted_list.index(target_value) + 1
-        for hit in hit_num:
-            if target_pos <= hit:
-                acc[f"hit@{hit}"] += 1
-        postfix_str = ""
-        for k, v in acc.items():
-            postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1)} " 
-        bar.set_postfix_str(postfix_str)
-    # print('acc =', acc * 100 / len(dataset1))
+        hit_num = [1, 3, 5, 8, 10]
+        acc = {f"hit@{hit}":0 for hit in hit_num}
+        print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num}")
+        bar = tqdm(enumerate(dataset1), desc='datas')
+        for idx1, data1 in bar:
+            metric_value_list = []
+            for idx2, data2 in enumerate(dataset2):
+                attn1, attn2 = data1['attn_map'].unsqueeze(0).to('cuda'), data2['attn_map'].unsqueeze(0).to('cuda')
+                metric_value = metric(attn1, attn2).item()
+                metric_value_list.append(metric_value)
+            target_value = metric_value_list[idx1]
+            sorted_list = sorted(metric_value_list, reverse=True)
+            target_pos = sorted_list.index(target_value) + 1
+            for hit in hit_num:
+                if target_pos <= hit:
+                    acc[f"hit@{hit}"] += 1
+            postfix_str = ""
+            for k, v in acc.items():
+                postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1)} " 
+            bar.set_postfix_str(postfix_str)
+        print(postfix_str)
     
 
 # 计算 PSNR 值

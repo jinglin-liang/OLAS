@@ -184,7 +184,7 @@ class DataIter(object):
         return data
 
 class ClassifyDataset(Dataset):
-    def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100):
+    def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100, sentence_num_perdir=1000):
         self.len = 0
         self.data = []
         self.remove_outliers = True
@@ -199,8 +199,11 @@ class ClassifyDataset(Dataset):
             self.env = lmdb.open(data_dir, max_readers=8, readonly=True, lock=False, readahead=True, meminit=True)
             with self.env.begin(write=False) as txn:
                 self.num_samples = int(txn.get('num_samples'.encode('utf-8')).decode("utf-8"))
-                self.len += self.num_samples
-                for idx in range(self.num_samples):
+                if self.num_samples < sentence_num_perdir:
+                    # raise ValueError(f"num_samples: {self.num_samples} < sentence_num_perdir: {sentence_num_perdir}")
+                    sentence_num_perdir = self.num_samples
+                self.len += sentence_num_perdir
+                for idx in range(sentence_num_perdir):
                     data_id = str(idx).encode("utf-8")
                     data_byte = txn.get(data_id)
                     data = pickle.loads(data_byte)
@@ -299,23 +302,30 @@ if __name__ == "__main__":
     setup_seed(2025)
 
     # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.1-8B-Instruct', 6:'Llama-3.2-3B-Instruct'}
-    train_model_ids = [3,4,5,6]
-    test_model_ids = [1,2]
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
+    train_model_ids = [1,2,3,4]
+    test_model_ids = [5,6]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
-    selected_orders = [3]
+    selected_orders = [1]
     num_classes = 1000
+    dataset_len = 2000
     sentence_len = 50
-    use_augment = True
-    attn_type = 'ola'
-    lr = 0.003
+    use_augment = False
+    attn_type = 'rolloutplus'
+    lr = 0.01
+    dataset = f"conll2012_{attn_type}_en_entity"
+    # dataset = f"imdb_{attn_type}"
+    addition = "_num{dataset_len}_origin" if attn_type == 'ola' else ""
 
-    train_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_random_all/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/conll2012_{attn_type}_en_entity_classify_random_all/{model_name}/train' for model_name in test_model_names]
-    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
-    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
-    # print(train_dataset[0])
+    train_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in test_model_names]
+    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
+    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
+    print(f"train_dataset_len = {len(train_dataset)}, test_dataset_len = {len(test_dataset)}")
+    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
+    print(selected_orders)
+    print(dataset)
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -370,6 +380,7 @@ if __name__ == "__main__":
 
     print(f"best_acc={best_acc}")
     print(best_cor_model_dict)
-    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}")
+    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
     print(selected_orders)
+    print(dataset)
     

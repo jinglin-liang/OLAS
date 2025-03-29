@@ -12,7 +12,7 @@ import data_utils
 from data_utils.data import DATASET_NAME_TO_PATH
 
 
-def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_classify_data_generate=False, load_method="origin"):
+def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_classify_data_generate=False, load_method="origin", classify_sentence_len=50, classify_sentence_num=2000):
     if os.path.isfile(DATASET_NAME_TO_PATH[dataset_name]):
         data_root_dir = os.path.dirname(DATASET_NAME_TO_PATH[dataset_name])
     elif os.path.isdir(DATASET_NAME_TO_PATH[dataset_name]):
@@ -33,7 +33,7 @@ def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_
     elif dataset_name == "conll2012en_entity":
         data_root_dir = data_root_dir + "_en_entity"
     if do_classify_data_generate:
-        data_root_dir = data_root_dir + "_classify"
+        data_root_dir = data_root_dir + "_classify" + "_len" + str(classify_sentence_len) + "_num" + str(classify_sentence_num)
     data_root_dir = data_root_dir + '_' + load_method
     save_dir = os.path.join(
         data_root_dir, 
@@ -262,7 +262,7 @@ class OLADataset_conll2012:
         return self.data[idx]
     
 class ClassifyDataset:
-    def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names, named_entities_names, language, task):
+    def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names=None, named_entities_names=None, language="en", task=None):
         # self.pos_tags_names = pos_tags_names
         # self.named_entities_names = named_entities_names
         self.data = []
