@@ -89,8 +89,9 @@ class PartPaddingDataCollator:
             heads = torch.zeros((len(batch["heads"]), tgt_len)).fill_(-200)
             for i, tmp_heads in enumerate(batch["heads"]):
                 assert tmp_heads.max() < batch["attention_mask"][i].sum().item()
-                tmp_heads[tmp_heads != -100] += (1 - batch["attention_mask"][i]).sum().item()
-                heads[i, -len(tmp_heads):] = tmp_heads
+                adjust_heads = tmp_heads.clone()
+                adjust_heads[adjust_heads != -100] += (1 - batch["attention_mask"][i]).sum().item()
+                heads[i, -len(adjust_heads):] = adjust_heads
             assert heads.max() < tgt_len
             batch["heads"] = heads.long()
         if "dp_rels" in batch.keys():

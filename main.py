@@ -5,6 +5,7 @@ import sys
 import json
 
 import torch
+from torch.utils.data import DataLoader
 from transformers import (
     set_seed,
     HfArgumentParser,
@@ -120,6 +121,13 @@ def main():
         train_dataset, data_collator = data_manager.get_dataset_collator(
             model_args.train_models_name_list, "train", training_args.task
         )
+
+        # debug
+        # debug_loader = DataLoader(train_dataset, batch_size=2, collate_fn=data_collator)
+        # for _ in range(2):
+        #     for i, batch in enumerate(debug_loader):
+        #         print(i)
+
         # prepare args for eval during checkpointing
         args_for_eval = [
             model_args.eval_models_name_list,
