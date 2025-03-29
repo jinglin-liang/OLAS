@@ -84,6 +84,158 @@ class AxialTransformerReAdapter(nn.Module):
         es = torch.cat([e1_emb, e2_emb], dim=-1)
         r = self.output_fc(es)
         return r
+    
+
+class SharedDropout(nn.Module):
+    def __init__(self, p=0.5, batch_first=True):
+        super(SharedDropout, self).__init__()
+        self.p = p
+        self.batch_first = batch_first
+
+    def extra_repr(self):
+        info = f"p={self.p}"
+        if self.batch_first:
+            info += f", batch_first={self.batch_first}"
+        return info
+
+    def forward(self, x):
+        if self.training:
+            if self.batch_first:
+                mask = self.get_mask(x[:, 0], self.p)
+            else:
+                mask = self.get_mask(x[0], self.p)
+            x *= mask.unsqueeze(1) if self.batch_first else mask
+        return x
+
+    @staticmethod
+    def get_mask(x, p):
+        mask = x.new_full(x.shape, 1 - p)
+        mask = torch.bernoulli(mask) / (1 - p)
+        return mask
+
+
+class MLP(nn.Module):
+    def __init__(self, n_in, n_hidden, dropout=0):
+        super(MLP, self).__init__()
+        self.linear = nn.Linear(n_in, n_hidden)
+        self.activation = nn.LeakyReLU(negative_slope=0.1)
+        self.dropout = SharedDropout(p=dropout)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.orthogonal_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
+
+    def forward(self, x):
+        x = self.linear(x)
+        x = self.activation(x)
+        x = self.dropout(x)
+        return x
+
+
+class Biaffine(nn.Module):
+
+    def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True):
+        super(Biaffine, self).__init__()
+
+        self.n_in = n_in
+        self.n_out = n_out
+        self.bias_x = bias_x
+        self.bias_y = bias_y
+        self.weight = nn.Parameter(torch.Tensor(n_out,
+                                                n_in + bias_x,
+                                                n_in + bias_y))
+        self.reset_parameters()
+
+    def extra_repr(self):
+        info = f"n_in={self.n_in}, n_out={self.n_out}"
+        if self.bias_x:
+            info += f", bias_x={self.bias_x}"
+        if self.bias_y:
+            info += f", bias_y={self.bias_y}"
+        return info
+
+    def reset_parameters(self):
+        nn.init.zeros_(self.weight)
+
+    def forward(self, x, y):
+        if self.bias_x:
+            x = torch.cat([x, x.new_ones(x.shape[:-1]).unsqueeze(-1)], -1)
+        if self.bias_y:
+            y = torch.cat([y, y.new_ones(y.shape[:-1]).unsqueeze(-1)], -1)
+        # [batch_size, 1, seq_len, d]
+        x = x.unsqueeze(1)
+        # [batch_size, 1, seq_len, d]
+        y = y.unsqueeze(1)
+        # [batch_size, n_out, seq_len, seq_len]
+        s = x @ self.weight @ y.transpose(-1, -2)
+        # remove dim 1 if n_out == 1
+        s = s.squeeze(1)
+        return s
+
+
+class AxialTransformerDPAdapter(nn.Module):
+    def  __init__(
+        self,
+        in_channels=3,
+        out_channels=3,
+        hidden_size=768,
+        axial_tf_layers=5,
+        heads=8,
+        reversible=True,
+        n_mlp_arc=512,
+        n_mlp_rel=128,
+        mlp_dropout=0.33,
+        **kwargs
+    ):
+        super().__init__()
+        self.input_conv = nn.Conv2d(in_channels, hidden_size, 1)
+        self.transformer = AxialImageTransformer(
+            dim = hidden_size,
+            depth = axial_tf_layers,
+            heads = heads,
+            reversible = reversible
+        )
+        self.mlp_arc_h = MLP(n_in=hidden_size,
+                             n_hidden=n_mlp_arc,
+                             dropout=mlp_dropout)
+        self.mlp_arc_d = MLP(n_in=hidden_size,
+                             n_hidden=n_mlp_arc,
+                             dropout=mlp_dropout)
+        self.mlp_rel_h = MLP(n_in=hidden_size,
+                             n_hidden=n_mlp_rel,
+                             dropout=mlp_dropout)
+        self.mlp_rel_d = MLP(n_in=hidden_size,
+                             n_hidden=n_mlp_rel,
+                             dropout=mlp_dropout)
+        self.arc_attn = Biaffine(n_in=n_mlp_arc,
+                                 bias_x=True,
+                                 bias_y=False)
+        self.rel_attn = Biaffine(n_in=n_mlp_rel,
+                                 n_out=out_channels,
+                                 bias_x=True,
+                                 bias_y=True)
+
+    def forward(self, x, attention_mask):
+        # input x to axial transformer
+        x = self.input_conv(x)
+        x = self.transformer(x)
+        # from diagonal to sequence
+        idx_tensor = torch.arange(x.size(-1)).to(x.device)
+        x = x[:, :, idx_tensor, idx_tensor]
+        x = x.transpose(1, 2).contiguous()  # [batch_size, seq_len, hidden_size]
+        # dependency parsing
+        arc_h = self.mlp_arc_h(x)
+        arc_d = self.mlp_arc_d(x)
+        rel_h = self.mlp_rel_h(x)
+        rel_d = self.mlp_rel_d(x)
+        # [batch_size, seq_len, seq_len]
+        s_arc = self.arc_attn(arc_d, arc_h)
+        # [batch_size, seq_len, seq_len, n_rels]
+        s_rel = self.rel_attn(rel_d, rel_h).permute(0, 2, 3, 1)
+        # set the scores that exceed the length of each sentence to -inf
+        s_arc.masked_fill_(~(attention_mask.unsqueeze(1).bool()), float('-inf'))
+        return s_arc, s_rel
 
 
 class AxialTransformerRnnAdapter(nn.Module):

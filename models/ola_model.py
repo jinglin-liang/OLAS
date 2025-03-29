@@ -9,7 +9,7 @@ from transformers.modeling_outputs import ModelOutput
 from transformers.data.data_collator import DataCollatorWithPadding
 
 from models.ola_utils import get_order_level_attention, get_tandem_level_attention, get_flow_attention, get_alti_attention, get_rolloutplus_attention, cal_maskes
-from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet, AxialTransformerReAdapter
+from models.adapters import AxialTransformerAdapter, AxialTransformerRnnAdapter, UNet, AxialTransformerReAdapter, AxialTransformerDPAdapter
 from models.ola_augmentations import (
     RandomHightlightColumns,
     AddGuassianNoise,
@@ -70,6 +70,16 @@ class OLALMOutput(ModelOutput):
     order_level_attention: Optional[Dict[int, torch.FloatTensor]] = None
     ola_maskes: Optional[Dict] = None
     layer_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+def cal_dp_loss(s_arc, s_rel, gold_arcs, gold_rels):
+    criterion = nn.CrossEntropyLoss()
+    in_range_idx = (gold_arcs != -100)
+    s_rel = s_rel[torch.arange(len(s_rel)).to(s_rel.device)[in_range_idx], gold_arcs[in_range_idx]]
+    arc_loss = criterion(s_arc[in_range_idx], gold_arcs[in_range_idx])
+    rel_loss = criterion(s_rel, gold_rels[in_range_idx])
+    loss = arc_loss + rel_loss
+    return loss
 
 
 class OLAModel(nn.Module):
@@ -172,6 +182,8 @@ class OLAModel(nn.Module):
             self.adaptor = UNet(ola_input_channal, num_classes, **kwargs)
         elif adapter_architecture == "re_axialtranformer":
             self.adaptor = AxialTransformerReAdapter(ola_input_channal, num_classes, **kwargs)
+        elif adapter_architecture == "dp_axialtranformer":
+            self.adaptor = AxialTransformerDPAdapter(ola_input_channal, num_classes, **kwargs)
         else:
             raise NotImplementedError(f"Adapter architecture {adapter_architecture} is not supported.")
 
@@ -229,6 +241,9 @@ class OLAModel(nn.Module):
         e1_e: Optional[torch.LongTensor] = None,
         e2_s: Optional[torch.LongTensor] = None,
         e2_e: Optional[torch.LongTensor] = None,
+        begin_mask: Optional[torch.BoolTensor] = None,
+        heads: Optional[torch.LongTensor] = None,
+        dp_rels: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[OLALMOutput]:
         assert attn_type in ["ola", "tandem", "first", "last", "flow", "rolloutplus", "alti", "grad", "grad_input", "ig"]
@@ -366,6 +381,19 @@ class OLAModel(nn.Module):
             if labels is not None:
                 loss_fct = nn.CrossEntropyLoss()
                 loss = loss_fct(prediction_scores, labels)
+            else:
+                loss = None
+        elif self.adapter_architecture == "dp_axialtranformer":
+            # adaptor forward
+            pred_src_arc, pred_src_rel = self.adaptor(stack_attn_tensor, attention_mask)
+            pred_begin_arc = pred_src_arc[begin_mask]
+            pred_begin_rel = pred_src_rel[begin_mask,:]
+            prediction_scores = pred_begin_arc
+            # calculate loss
+            if heads is not None and dp_rels is not None:
+                mask_gold = (heads != -200)
+                gold_arcs, gold_dp_rels = heads[mask_gold], dp_rels[mask_gold]
+                loss = cal_dp_loss(pred_begin_arc, pred_begin_rel, gold_arcs, gold_dp_rels)
             else:
                 loss = None
         else:

@@ -1,4 +1,4 @@
-GPU_LIST=('3' '4' '5' '6')
+GPU_LIST=('0' '2')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -18,7 +18,7 @@ fi
 
 pid_exist(){
     input_id=$1
-    key_word='run.sh'
+    key_word='run_dp.sh'
     proc_num=$(ps -aux | grep $input_id | grep $key_word | grep -v grep | wc -l)
     return $proc_num
 }
@@ -46,7 +46,7 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_bert_base_semevalre.json' 'configs/train_roberta_base_semevalre.json' 'configs/train_electra_base_semevalre.json';
+for CFG in 'configs/train_bert_base_udewt_dp.json';
 do
     for LR in '1e-5' '3e-5' '1e-4' '3e-4';
     do
@@ -56,7 +56,7 @@ do
             have_free_gpu=$?
             if [ $have_free_gpu -eq 1 ]
             then
-                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_LR_${LR}_sameaug.log
+                LOG_FILE=outputs/logs/CFG_${CFG:8:20}_LR_${LR}_udp.log
                 {
                     CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR >> $LOG_FILE 2>&1
                 } &

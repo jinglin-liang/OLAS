@@ -399,3 +399,23 @@ class OLADataset_SemEvalRe:
 
     def __getitem__(self, idx):
         return self.data[idx]
+    
+
+# class OLADataset_UDDP:
+#     def __init__(self, raw_train_data, tokenizer, cutoff_len, **kwargs) -> None:
+#         self.data = []
+#         pbar = tqdm(range(len(raw_train_data)), desc="Processing data")
+#         for i in pbar:
+#             data_point = self._standize_function(raw_train_data[i], tokenizer, cutoff_len, **kwargs)
+#             if data_point is not None:
+#                 self.data.append(data_point)
+#             pbar.set_postfix({"valided datas": len(self.data)})
+    
+#     def _standize_function(self, data_point, tokenizer, cutoff_len, **kwargs):
+#         return data_point
+
+#     def __len__(self):
+#         return len(self.data)
+
+#     def __getitem__(self, idx):
+#         return self.data[idx]

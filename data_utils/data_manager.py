@@ -19,8 +19,9 @@ from data_utils.ola_dataset import (
     OLADataset,
     OLADataset_conll2012,
     ClassifyDataset,
-    OLADataset_SemEvalRe
+    OLADataset_SemEvalRe,
 )
+from data_utils.dp_utils import OLADataset_UDDP, UddpPreProcessor
 
 
 class PartPaddingDataCollator:
@@ -36,7 +37,7 @@ class PartPaddingDataCollator:
             self.keys_to_ignore = [
                 "text", "token_pos_tags", "token_chunk_tags", "token_named_entities_tags",
                 "tokens", "pos_tags", "chunk_tags", "named_entities_tags", "id", "ola", "task",
-                "e1_s", "e1_e", "e2_s", "e2_e", "relation"
+                "e1_s", "e1_e", "e2_s", "e2_e", "relation", "begin_mask", "heads", "dp_rels"
             ]
         else:
             self.keys_to_ignore = keys_to_ignore
@@ -77,7 +78,30 @@ class PartPaddingDataCollator:
             batch["e1_e"] = torch.LongTensor(batch["e1_e"])
             batch["e2_s"] = torch.LongTensor(batch["e2_s"])
             batch["e2_e"] = torch.LongTensor(batch["e2_e"])
+        if "begin_mask" in batch.keys():
+            tgt_len = batch["input_ids"].shape[1]
+            begin_mask = torch.zeros((len(batch["begin_mask"]), tgt_len))
+            for i, tmp_begin_mask in enumerate(batch["begin_mask"]):
+                begin_mask[i, -len(tmp_begin_mask):] = tmp_begin_mask
+            batch["begin_mask"] = begin_mask.bool()
+        if "heads" in batch.keys():
+            tgt_len = batch["input_ids"].shape[1]
+            heads = torch.zeros((len(batch["heads"]), tgt_len)).fill_(-200)
+            for i, tmp_heads in enumerate(batch["heads"]):
+                assert tmp_heads.max() < batch["attention_mask"][i].sum().item()
+                tmp_heads[tmp_heads != -100] += (1 - batch["attention_mask"][i]).sum().item()
+                heads[i, -len(tmp_heads):] = tmp_heads
+            assert heads.max() < tgt_len
+            batch["heads"] = heads.long()
+        if "dp_rels" in batch.keys():
+            tgt_len = batch["input_ids"].shape[1]
+            dp_rels = torch.zeros((len(batch["dp_rels"]), tgt_len)).fill_(-200)
+            for i, tmp_dp_rels in enumerate(batch["dp_rels"]):
+                dp_rels[i, -len(tmp_dp_rels):] = tmp_dp_rels
+            batch["dp_rels"] = dp_rels.long()
         batch["task"] = self.task
+        if "begin_mask" in batch.keys():
+            assert (batch["begin_mask"].sum(-1) == heads.ne(-200).sum(-1)).all()
         return dict(batch)
 
 
@@ -173,6 +197,12 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 self.data["train"][tmp_train_model] = OLADataset_SemEvalRe(raw_train_data, **kwargs)
+            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+                kwargs["min_freq"] = 2
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
+                self.data["train"][tmp_train_model] = OLADataset_UDDP(vocab.numericalize(raw_train_data, **kwargs))
+                # self.data["train"][tmp_train_model] = OLADataset_UDDP(raw_train_data, **kwargs)
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 preprocess_func = functools.partial(
@@ -204,6 +234,11 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 self.data["test"][tmp_test_model] = OLADataset_SemEvalRe(raw_test_data, **kwargs)
+            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+                kwargs["min_freq"] = 2
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
+                self.data["test"][tmp_test_model] = OLADataset_UDDP(vocab.numericalize(raw_test_data, **kwargs))
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 preprocess_func = functools.partial(
@@ -239,7 +274,7 @@ class DataManager:
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=self.pad_to_multiple_of
             )
-        elif self.dataset_name in ["imdb", "semeval_re"]:
+        elif self.dataset_name in ["imdb", "semeval_re", "ud_english_gum", "ud_english_ewt"]:
             base_data_collator = DataCollatorWithPadding(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",

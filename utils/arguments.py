@@ -305,6 +305,10 @@ class DataArguments:
                 self.num_classes = 37
             elif self.dataset_name == "semeval_re":
                 self.num_classes = 19
+            elif self.dataset_name == "ud_english_gum":
+                self.num_classes = 55
+            elif self.dataset_name == "ud_english_ewt":
+                self.num_classes = 55
             else:
                 raise ValueError(f"Dataset {self.dataset_name} is not supported.")
 

@@ -4,3 +4,4 @@ __pycache__/
 pretrained_models
 datasets
 compare_vis/
+wandb/

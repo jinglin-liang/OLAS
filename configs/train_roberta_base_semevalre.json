@@ -1,7 +1,7 @@
 {
     "use_generated_oladata": false,
     "train_models_name_list": [
-        "pretrained_models/bert-base-cased"
+        "pretrained_models/roberta-large"
     ],
     "eval_models_name_list": [
         "pretrained_models/bert-base-cased",
