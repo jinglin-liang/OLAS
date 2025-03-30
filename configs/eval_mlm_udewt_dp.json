@@ -1,0 +1,17 @@
+{
+    "use_generated_oladata": false,
+    "train_models_name_list": [
+        "pretrained_models/roberta-large"
+    ],
+    "eval_models_name_list": [
+        "pretrained_models/bert-base-cased"
+    ],
+    "dataset_name": "ud_english_ewt",
+    "task": "dp",
+    "cutoff_len": 64,
+    "do_train": false,
+    "do_eval": true,
+    "per_device_eval_batch_size": 2,
+    "eval_adapter_checkpoint": "outputs/20250329_164721/checkpoint-75264/ola_adapter_weight.bin",
+    "attn_type": "ola"
+}
