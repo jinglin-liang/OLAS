@@ -46,7 +46,7 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for CFG in 'configs/train_bert_base_semevalre.json' 'configs/train_roberta_base_semevalre.json' 'configs/train_electra_base_semevalre.json';
+for CFG in 'configs/train_roberta_base_semevalre.json';
 do
     for LR in '1e-5' '3e-5' '1e-4' '3e-4';
     do
