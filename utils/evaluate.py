@@ -60,6 +60,59 @@ class TextClsMetric:
 
 
 @dataclass
+class DependencyParsingMetric:
+    total = 0
+    correct_arcs = 0
+    correct_rels = 0
+    uas = 0
+    las = 0
+    all_samples: List[dict] = field(default_factory=lambda: [])
+    positive_samples: List[dict] = field(default_factory=lambda: [])
+    negative_samples: List[dict] = field(default_factory=lambda: [])
+    tokenizer: Optional[AutoTokenizer] = None
+
+    def judge(self, predictions: Tensor, labels: Tensor, data: Dict = None):
+        '''
+        predictions: (n, c)
+        labels: (n)
+        '''
+        pred_begin_arc, pred_begin_rel = predictions
+        heads = data["heads"].to(pred_begin_arc.device)
+        dp_rels = data["dp_rels"].to(pred_begin_arc.device)
+        heads = heads[heads.ne(-200)]
+        dp_rels = dp_rels[dp_rels.ne(-200)]
+        assert pred_begin_arc.shape[0] == pred_begin_rel.shape[0] == heads.shape[0] == dp_rels.shape[0]
+        in_range_mask = heads.ne(-100)
+        pred_begin_arc = pred_begin_arc[in_range_mask]
+        pred_begin_rel = pred_begin_rel[in_range_mask, :]
+        heads = heads[in_range_mask]
+        dp_rels = dp_rels[in_range_mask]
+        pred_arc = pred_begin_arc.argmax(dim=-1)
+        pred_rel = pred_begin_rel[torch.arange(pred_arc.shape[0]), pred_arc, :].argmax(dim=-1)
+        self.total += pred_arc.shape[0]
+        correct_acr_mask = (pred_arc == heads)
+        correct_rel_mask = (pred_rel == dp_rels) & correct_acr_mask
+        self.correct_arcs += correct_acr_mask.sum().item()
+        self.correct_rels += correct_rel_mask.sum().item()
+        self.uas = self.correct_arcs / (self.total + 1e-10)
+        self.las = self.correct_rels / (self.total + 1e-10)
+        temp_samples = {
+            "heads": heads.tolist(),
+            "dp_rels": dp_rels.tolist(),
+            "pred_arc": pred_arc.tolist(),
+            "pred_rel": pred_rel.tolist(),
+        }
+        self.all_samples.append(temp_samples)
+        if correct_acr_mask.all():
+            self.positive_samples.append(temp_samples)
+        else:
+            self.negative_samples.append(temp_samples)
+
+    def metric_string(self):
+        return f"UAS={self.uas:.4f}, LAS={self.las:.4f}."
+
+
+@dataclass
 class TokenClsMetric(TextClsMetric):
     total_tokens_num: int = 0
     correct_tokens_num: int = 0
@@ -224,13 +277,16 @@ def evaluate_ola_adapter(
             output = model(
                 **{k: v for k, v in data.items() if k in interested_keys}
             )
-        eval_metric.judge(output.logits, data["labels"], data)
+        eval_metric.judge(output.logits, data.get("labels"), data)
         bar.set_postfix_str(f"{eval_metric.metric_string()}")
     # save the results
     if len(eval_metric.all_samples) > 0:
         os.makedirs(output_dir, exist_ok=True)
         if isinstance(eval_metric, MultiTokenMetric):
             with open(os.path.join(output_dir, f"all_results_acc_{eval_metric.accuracy:.4f}_P_{eval_metric.precision:.4f}_R_{eval_metric.recall:.4f}_F1_{eval_metric.f1:.4f}.json"), "w") as f:
+                json.dump(eval_metric.all_samples, f, indent=4)
+        elif isinstance(eval_metric, DependencyParsingMetric):
+            with open(os.path.join(output_dir, f"all_results_UAS_{eval_metric.uas:.4f}_LAS_{eval_metric.las:.4f}.json"), "w") as f:
                 json.dump(eval_metric.all_samples, f, indent=4)
         else:
             with open(os.path.join(output_dir, f"all_results_acc_{eval_metric.accuracy:.4f}.json"), "w") as f:
@@ -307,6 +363,10 @@ def evaluate_ola_adapter_with_multi_llms(
                     label_names=eval_dataset.datasets[0].named_entities_names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
+        elif data_manager.dataset_name.lower() in ["ud_english_gum", "ud_english_ewt"]:
+            eval_metric = DependencyParsingMetric(
+                tokenizer=data_manager.tokenizer_dict[eval_model_name],
+            )
         else:
             raise NotImplemented
         # create OLAModel

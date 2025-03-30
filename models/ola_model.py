@@ -388,9 +388,11 @@ class OLAModel(nn.Module):
             pred_src_arc, pred_src_rel = self.adaptor(stack_attn_tensor, attention_mask)
             pred_begin_arc = pred_src_arc[begin_mask]
             pred_begin_rel = pred_src_rel[begin_mask,:]
-            prediction_scores = pred_begin_arc
+            prediction_scores = (pred_begin_arc, pred_begin_rel)
             # calculate loss
             if heads is not None and dp_rels is not None:
+                heads = heads.to(pred_begin_arc.device)
+                dp_rels = dp_rels.to(pred_begin_arc.device)
                 mask_gold = (heads != -200)
                 gold_arcs, gold_dp_rels = heads[mask_gold], dp_rels[mask_gold]
                 loss = cal_dp_loss(pred_begin_arc, pred_begin_rel, gold_arcs, gold_dp_rels)
