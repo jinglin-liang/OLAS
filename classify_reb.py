@@ -208,7 +208,15 @@ class ClassifyDataset(Dataset):
                     data_byte = txn.get(data_id)
                     data = pickle.loads(data_byte)
                     tmp_attn_map = {k: attn for k, attn in data['ola'].items() if k in selected_orders}
-                    self.data.append({'id': data['id'], 'attn_map': tmp_attn_map, 'attention_mask': data['attention_mask'], 'model': data_dir.split('/')[-2]})
+                    if 'origin' in data_dir:
+                        load_method = 'origin'
+                    elif 'random_all'in data_dir:
+                        load_method = 'random_all'
+                    elif 'layer_disorder'in data_dir:
+                        load_method = 'layer_disorder'
+                    else:
+                        raise NotImplementedError
+                    self.data.append({'id': data['id'], 'attn_map': tmp_attn_map, 'attention_mask': data['attention_mask'], 'model': data_dir.split('/')[-2], 'load_method': load_method})
 
     def __len__(self):
         return self.len
@@ -239,7 +247,7 @@ class ClassifyDataset(Dataset):
             result_type='rm_ol'
         )
         stack_attn_tensor = self.transform(stack_attn_tensor)[0]
-        return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model']}
+        return {'index': self.data[idx]['id'], 'attn_map': stack_attn_tensor, 'model': self.data[idx]['model'], 'load_method': self.data[idx]['load_method']}
     
     def _init_ola_augmentation(self, use_augment):
         if use_augment:
@@ -275,19 +283,18 @@ class ClassifyDataset(Dataset):
         else:
             self.ola_augments = None
 
-def _compute_accuracy(model, loader, model_names):
+def _compute_accuracy(model, loader):
     model.eval()
     correct, total = 0, 0
-    # cor_model_dict = {"gemma-9b": 0, "bloomz-7b1": 0, "qwen-7b": 0, "gemma-2b": 0, "bloomz-3b": 0, "qwen-1b": 0}
-    cor_model_dict = {model_name: 0 for model_name in model_names}
+    cor_model_dict = {'origin': 0, 'random_all': 0, 'layer_disorder': 0}
     for i, data in enumerate(loader):
-        inputs, targets, model_names = data['attn_map'].cuda(), data['index'], data['model']
+        inputs, targets, load_methods = data['attn_map'].cuda(), data['index'], data['load_method']
         with torch.no_grad():
             outputs = model(inputs)["logits"]
         predicts = torch.max(outputs, dim=1)[1]
         correct += (predicts.cpu() == targets).sum()
         for cor_idx in torch.where(predicts.cpu() == targets)[0]:
-            cor_model_dict[model_names[cor_idx]] += 1
+            cor_model_dict[load_methods[cor_idx]] += 1
         total += len(targets)
     return np.around(correct.cpu().data.numpy() * 100 / total, decimals=2), cor_model_dict
 
@@ -301,35 +308,26 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
-    train_model_ids = [1,2,5,6]
-    test_model_ids = [3,4]
-    train_model_names = [ams[i] for i in train_model_ids]
-    test_model_names = [ams[i] for i in test_model_ids]
-    selected_orders = [1]
+    ams = {1:'Qwen2-1.5B-Instruct', 2:'gemma-2-2b-it', 3:'Llama-3.2-3B-Instruct'}
+    model_name = ams[3]
+    selected_orders = [3]
     num_classes = 1000
-    dataset_len = 2000
-    sentence_len = 80
-    use_augment = True
-    attn_type = 'ola'
-    lr = 0.003
-    dataset = f"conll2012_{attn_type}_en_entity"
-    # dataset = f"imdb_{attn_type}"
-    load_method = "origin"
-    if load_method == 'origin':
-        addition = f"_num{dataset_len}_origin" if attn_type == 'ola' else ""
-    else:
-        addition = f"_num1000_{load_method}_seed2025"
+    sentence_len = 50
+    use_augment = False
+    lr = 0.005
 
-    train_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in test_model_names]
+    train_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len50_num1000_random_all_seed42/{model_name}/train',
+                            f'datasets/conll2012_ola_en_entity_classify_len50_num1000_random_all_seed100/{model_name}/train',
+                            f'datasets/conll2012_ola_en_entity_classify_len50_num1000_layer_disorder_seed42/{model_name}/train',
+                            f'datasets/conll2012_ola_en_entity_classify_len50_num1000_layer_disorder_seed100/{model_name}/train']
+    test_data_dir_paths = [f'datasets/conll2012_ola_en_entity_classify_len50_num1000_random_all_seed2025/{model_name}/train',
+                           f'datasets/conll2012_ola_en_entity_classify_len50_num1000_layer_disorder_seed2025/{model_name}/train',
+                           f'datasets/conll2012_ola_en_entity_classify_len50_num2000_origin/{model_name}/train']
     train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
     test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
     print(f"train_dataset_len = {len(train_dataset)}, test_dataset_len = {len(test_dataset)}")
-    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
+    print(f"lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
     print(selected_orders)
-    print(dataset)
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -370,8 +368,8 @@ if __name__ == "__main__":
         pbar.set_postfix({"loss": loss.item(), "train_acc": train_acc, "test_acc": test_acc})
 
         if (step+1) % 100 == 0:
-            train_acc, cor_model_dict = _compute_accuracy(model, train_dataloader, train_model_names)
-            test_acc, cor_model_dict = _compute_accuracy(model, test_dataloader, test_model_names)
+            train_acc, cor_model_dict = _compute_accuracy(model, train_dataloader)
+            test_acc, cor_model_dict = _compute_accuracy(model, test_dataloader)
 
             if best_acc > test_acc:
                 model.load_state_dict(best_w)
@@ -384,7 +382,6 @@ if __name__ == "__main__":
 
     print(f"best_acc={best_acc}")
     print(best_cor_model_dict)
-    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
+    print(f"lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
     print(selected_orders)
-    print(dataset)
     

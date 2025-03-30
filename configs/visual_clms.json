@@ -1,5 +1,5 @@
 {
-    "visual_text_file": "datasets/visualize/new4.txt",
+    "visual_text_file": "datasets/visualize/final.txt",
     "train_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
         "pretrained_models/gemma-2-2b-it",
