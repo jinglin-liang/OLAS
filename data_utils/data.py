@@ -1,4 +1,8 @@
+from typing import Dict, Tuple, List, Any, Callable
+from collections import namedtuple
 from datasets import load_dataset
+
+from conllu import parse_incr
 
 
 DATASET_NAME_TO_PATH = {
@@ -106,6 +110,151 @@ def conll2000_chunk_standardize_function(data_point, tokenizer, cutoff_len, pos_
     return ret
 
 
+def process_multiword_tokens(annotation):
+    """
+    Processes CoNLLU annotations for multi-word tokens.
+    If the token id returned by the conllu library is a tuple object (either a multi-word token or an elided token),
+    then the token id is set to None so that the token won't be used later on by the model.
+    """
+    
+    for i in range(len(annotation)):
+        conllu_id = annotation[i]["id"]
+        if type(conllu_id) == tuple:
+            if "-" in conllu_id:
+                conllu_id = str(conllu_id[0]) + "-" + str(conllu_id[2])
+                annotation[i]["multi_id"] = conllu_id
+                annotation[i]["id"] = None
+            elif "." in conllu_id:
+                annotation[i]["id"] = None
+                annotation[i]["multi_id"] = None
+        else:
+            annotation[i]["multi_id"] = None
+    
+    return annotation
+
+
+UD_Sentence = namedtuple(typename='UD_Sentence',
+                      field_names=['ids', 'words', 'lemmas', 'upos_tags',
+                                   'xpos_tags', 'feats', 'heads', 'rels',
+                                   'multiword_ids', 'multiword_forms'],
+                      defaults=[None]*10)
+
+
+class UniversalDependenciesDatasetReader(object):
+    def __init__(self):
+        self.sentences = []
+        self.ids = []
+        self.ROOT = "<ROOT>"
+
+    def load(self, file_path):
+        counter = 1
+        with open(file_path, 'r') as conllu_file:
+
+            for annotation in parse_incr(conllu_file):
+                # CoNLLU annotations sometimes add back in words that have been elided
+                # in the original sentence; we remove these, as we're just predicting
+                # dependencies for the original sentence.
+                # We filter by None here as elided words have a non-integer word id,
+                # and we replace these word ids with None in process_multiword_tokens.
+                annotation = process_multiword_tokens(annotation)               
+                multiword_tokens = [x for x in annotation if x["multi_id"] is not None]     
+                annotation = [x for x in annotation if x["id"] is not None]
+
+                if len(annotation) == 0:
+                    continue
+
+                def get_field(tag: str, map_fn: Callable[[Any], Any] = None) -> List[Any]:
+                    map_fn = map_fn if map_fn is not None else lambda x: x
+                    return [map_fn(x[tag]) if x[tag] is not None else "_" for x in annotation if tag in x]
+
+                # Extract multiword token rows (not used for prediction, purely for evaluation)
+                ids = [x["id"] for x in annotation]
+                multiword_ids = [x["multi_id"] for x in multiword_tokens]
+                multiword_forms = [x["form"] for x in multiword_tokens]
+
+                words = get_field("form")
+                lemmas = get_field("lemma")
+                # upos_tags = get_field("upostag")
+                # xpos_tags = get_field("xpostag")
+                upos_tags = get_field("upos")
+                xpos_tags = get_field("xpos")
+                feats = get_field("feats", lambda x: "|".join(k + "=" + v for k, v in x.items())
+                                                     if hasattr(x, "items") else "_")
+                heads = get_field("head")
+                dep_rels = get_field("deprel")
+                sentence = UD_Sentence(ids,words,lemmas,upos_tags,xpos_tags,feats,heads, dep_rels,multiword_ids,multiword_forms)
+                self.sentences.append(sentence)
+                self.ids.append(counter)
+                counter = counter + 1
+
+    def __len__(self):
+        return len(self.ids)
+
+    def __getitem__(self, item):
+        return self.sentences[item]
+
+
+    @property
+    def words(self):
+        return [[self.ROOT] + list(sentence.words) for sentence in self.sentences]
+
+    @property
+    def tags(self):
+        return [[self.ROOT] + list(sentence.upos_tags) for sentence in self.sentences]
+
+    @property
+    def heads(self):
+        return [[0] + list(map(int, sentence.heads)) for sentence in self.sentences]
+
+    @property
+    def rels(self):
+        return [[self.ROOT] + list(sentence.rels) for sentence in self.sentences]
+
+    @heads.setter
+    def heads(self, sequences):
+        self.sentences = [sentence._replace(heads=sequence)
+                          for sentence, sequence in zip(self.sentences, sequences)]
+
+    @rels.setter
+    def rels(self, sequences):
+        self.sentences = [sentence._replace(rels=sequence)
+                          for sentence, sequence in zip(self.sentences, sequences)]
+
+    def save(self, fname):
+        with open(fname, 'w') as f:
+            for item in self.sentences:
+                output = self.write(item)
+                f.write(output)
+
+    def write(self, outputs) :
+        outputs = dict(outputs._asdict())
+        word_count = len([word for word in outputs["words"]])
+        lines = zip(*[outputs[k] if k in outputs else ["_"] * word_count
+                      for k in ["ids", "words", "lemmas", "upos_tags", "xpos_tags", "feats",
+                                "heads", "rels"]])
+
+        multiword_map = None
+        if outputs["multiword_ids"]:
+            multiword_ids = [[id] + [int(x) for x in id.split("-")] for id in outputs["multiword_ids"]]
+            multiword_forms = outputs["multiword_forms"]
+            multiword_map = {start: (id_, form) for (id_, start, end), form in zip(multiword_ids, multiword_forms)}
+
+        output_lines = []
+        for i, line in enumerate(lines):
+            line = [str(l) for l in line]
+
+            # Handle multiword tokens
+            if multiword_map and i+1 in multiword_map:
+                id_, form = multiword_map[i+1]
+                row = f"{id_}\t{form}" + "".join(["\t_"] * 8)
+                output_lines.append(row)
+
+            row = "\t".join(line) + "".join(["\t_"] * 2)
+            output_lines.append(row)
+
+        return "\n".join(output_lines) + "\n\n"
+    
+
 def load_raw_data(data_name: str):
     '''
     return (train_data, test_data), standardize_function
@@ -142,6 +291,18 @@ def load_raw_data(data_name: str):
         data = load_dataset(DATASET_NAME_TO_PATH[data_name])
         train_data = data["train"]
         test_data = data["test"]
+        return (train_data, test_data), None
+    elif data_name.lower() == "ud_english_gum":
+        train_data = UniversalDependenciesDatasetReader()
+        train_data.load("datasets/UD_English-GUM/en_gum-ud-train.conllu")
+        test_data = UniversalDependenciesDatasetReader()
+        test_data.load("datasets/UD_English-GUM/en_gum-ud-test.conllu")
+        return (train_data, test_data), None
+    elif data_name.lower() == "ud_english_ewt":
+        train_data = UniversalDependenciesDatasetReader()
+        train_data.load("datasets/UD_English-EWT/en_ewt-ud-train.conllu")
+        test_data = UniversalDependenciesDatasetReader()
+        test_data.load("datasets/UD_English-EWT/en_ewt-ud-test.conllu")
         return (train_data, test_data), None
     else:
         raise NotImplementedError(f"Dataset {data_name} is not supported.")

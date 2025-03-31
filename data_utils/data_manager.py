@@ -19,8 +19,9 @@ from data_utils.ola_dataset import (
     OLADataset,
     OLADataset_conll2012,
     ClassifyDataset,
-    OLADataset_SemEvalRe
+    OLADataset_SemEvalRe,
 )
+from data_utils.dp_utils import OLADataset_UDDP, UddpPreProcessor
 
 
 class PartPaddingDataCollator:
@@ -212,6 +213,11 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 self.data["train"][tmp_train_model] = OLADataset_SemEvalRe(raw_train_data, **kwargs)
+            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+                kwargs["min_freq"] = 2
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
+                vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
+                self.data["train"][tmp_train_model] = OLADataset_UDDP(vocab.numericalize(raw_train_data, **kwargs))
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 preprocess_func = functools.partial(
@@ -243,6 +249,11 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 self.data["test"][tmp_test_model] = OLADataset_SemEvalRe(raw_test_data, **kwargs)
+            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+                kwargs["min_freq"] = 2
+                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
+                vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
+                self.data["test"][tmp_test_model] = OLADataset_UDDP(vocab.numericalize(raw_test_data, **kwargs))
             else:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 preprocess_func = functools.partial(
@@ -278,7 +289,7 @@ class DataManager:
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=self.pad_to_multiple_of
             )
-        elif self.dataset_name in ["imdb", "semeval_re"]:
+        elif self.dataset_name in ["imdb", "semeval_re", "ud_english_gum", "ud_english_ewt"]:
             base_data_collator = DataCollatorWithPadding(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
