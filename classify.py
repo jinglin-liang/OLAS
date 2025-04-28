@@ -303,8 +303,8 @@ if __name__ == "__main__":
 
     # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
     ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
-    train_model_ids = [1,2,5,6]
-    test_model_ids = [3,4]
+    train_model_ids = [3,4,5,6]
+    test_model_ids = [1,2]
     train_model_names = [ams[i] for i in train_model_ids]
     test_model_names = [ams[i] for i in test_model_ids]
     selected_orders = [1]
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     sentence_len = 80
     use_augment = True
     attn_type = 'ola'
-    lr = 0.003
+    lr = 0.007
     dataset = f"conll2012_{attn_type}_en_entity"
     # dataset = f"imdb_{attn_type}"
     load_method = "origin"

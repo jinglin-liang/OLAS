@@ -23,18 +23,27 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 def build_english_prompt_mlm(sentence, e1, e2, mask_str):
-    return f"""What is the relationship between e1:"{e1}" and e2:"{e2}" in this sentence? Choose the correct option number.
-    Sentence: {sentence}
-    Options:
-    {REL_LABELS_STR}
-    Answer: {mask_str}."""
+    return f"""Act as a relation extraction tagging tool. Find the relationship between e1 and e2 in the given sentence by choosing the correct option number from {REL_LABELS_STR}.
+
+    Sentence: {sentence}.
+    e1: {e1}
+    e2: {e2}
+    Response: The relationship number is {mask_str}."""
+    # return f"""What is the relationship between e1:"{e1}" and e2:"{e2}" in this sentence? Choose the correct option number.
+    # Sentence: {sentence}
+    # Options:
+    # {REL_LABELS_STR}
+    # Answer: {mask_str}."""
 
 def build_english_prompt_clm(sentence, e1, e2):
-    return f"""What is the relationship between e1:"{e1}" and e2:"{e2}" in this sentence? Choose the correct option number.
-    Sentence: {sentence}
-    Options:
-    {REL_LABELS_STR}
-    Answer: """
+    return f"""Act as a relation extraction tagging tool. Find the relationship between e1 and e2 in the given sentence according to these rules:
+    1. Choose the correct option number from {REL_LABELS_STR}.
+    2. Do not explain or add extra text. Only provide the option number.
+
+    Sentence: {sentence}.
+    e1: {e1}
+    e2: {e2}
+    Response:"""
 
 def extract_number(s):
     """从预测文本中提取数字（处理如'4'或'##4'的情况）"""
@@ -72,7 +81,7 @@ def predict_dependency_clm(model, tokenizer, sentence, error):
     e1 = sentence.split('<e1>')[-1].split('</e1>')[0]
     e2 = sentence.split('<e2>')[-1].split('</e2>')[0]
     prompt = build_english_prompt_clm(sentence, e1, e2)
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to('cuda') for k, v in inputs.items()}
 
     with torch.no_grad():
@@ -105,7 +114,7 @@ if __name__ == "__main__":
         "pretrained_models/Llama-3.2-3B-Instruct",
         "pretrained_models/Llama-3.1-8B-Instruct"
     ]
-    model_name = models_name_list[2]
+    model_name = models_name_list[8]
     print(model_name)
     
 
@@ -140,7 +149,7 @@ if __name__ == "__main__":
                 acc += 1
         else:
             predictions = predict_dependency_clm(model, tokenizer, sentence, error)
-            tmp = predictions.split('Answer:')[-1].lower().replace("e1", "").replace("e2", "")
+            tmp = predictions.split('Response:')[-1].lower().replace("e1", "").replace("e2", "")
             if tmp.find(str(rel)) != -1:
                 if rel < 10:
                     if tmp.find(str(rel+10)) == -1:

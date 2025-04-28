@@ -50,7 +50,7 @@ from models.ola_augmentations import (
 
 
 class ClassifyDataset(Dataset):
-    def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100):
+    def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100, sentence_num_perdir=1000):
         self.len = 0
         self.data = []
         self.remove_outliers = True
@@ -65,8 +65,11 @@ class ClassifyDataset(Dataset):
             self.env = lmdb.open(data_dir, max_readers=8, readonly=True, lock=False, readahead=True, meminit=True)
             with self.env.begin(write=False) as txn:
                 self.num_samples = int(txn.get('num_samples'.encode('utf-8')).decode("utf-8"))
-                self.len += self.num_samples
-                for idx in range(self.num_samples):
+                if self.num_samples < sentence_num_perdir:
+                    # raise ValueError(f"num_samples: {self.num_samples} < sentence_num_perdir: {sentence_num_perdir}")
+                    sentence_num_perdir = self.num_samples
+                self.len += sentence_num_perdir
+                for idx in range(sentence_num_perdir):
                     data_id = str(idx).encode("utf-8")
                     data_byte = txn.get(data_id)
                     data = pickle.loads(data_byte)
@@ -149,7 +152,9 @@ def setup_seed(seed):
 if __name__ == "__main__":
     setup_seed(2025)
 
-    model_pairs = [(1,3), (3,1), (1,5), (5,1), (3,5), (5,3)]
+    # model_pairs = [(1,3), (3,1), (1,5), (5,1), (3,5), (5,3)]
+    # model_pairs = [(1, 2), (1, 3), (1, 4), (1, 5), (2, 1), (2, 3), (2, 4), (2, 5), (3, 1), (3, 2), (3, 4), (3, 5), (4, 1), (4, 2), (4, 3), (4, 5), (5, 1), (5, 2), (5, 3), (5, 4)]
+    model_pairs = [(1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5)]
     for model_pair in model_pairs:
         # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
         ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
@@ -159,11 +164,12 @@ if __name__ == "__main__":
         sentence_len = 50
         use_augment = False
         attn_type = 'ola'
+        sentence_num_perdir = 1000
 
         data_dir_path1 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model1_name}/train']
         data_dir_path2 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model2_name}/train']
-        dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
-        dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len)
+        dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
+        dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
         print(f"dataset1_len = {len(dataset1)}, dataset2_len = {len(dataset2)}")
 
         metric_name = 'ssim'
@@ -193,6 +199,8 @@ if __name__ == "__main__":
                 postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1)} " 
             bar.set_postfix_str(postfix_str)
         print(postfix_str)
+        print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num} finish.")
+        print(f"hit@1/hit@5: {(acc['hit@1']*100/sentence_num_perdir):.2f}/{(acc['hit@5']*100/sentence_num_perdir):.2f}")
     
 
 # 计算 PSNR 值

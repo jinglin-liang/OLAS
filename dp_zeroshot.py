@@ -18,6 +18,7 @@ REL_LABELS = [
     'nsubj', 'nsubj:outer', 'nsubj:pass', 'nummod', 'obj', 'obl', 'obl:agent',
     'obl:unmarked', 'orphan', 'parataxis', 'punct', 'reparandum', 'root', 'vocative', 'xcomp'
 ]
+REL_LABELS_STR = '0: [PAD]\n1: [UNK]\n2: [BERT]\n3: <ROOT>\n4: acl\n5: acl:relcl\n6: advcl\n7: advcl:relcl\n8: advmod\n9: amod\n10: appos\n11: aux\n12: aux:pass\n13: case\n14: cc\n15: cc:preconj\n16: ccomp\n17: compound\n18: compound:prt\n19: conj\n20: cop\n21: csubj\n22: csubj:outer\n23: csubj:pass\n24: dep\n25: det\n26: det:predet\n27: discourse\n28: dislocated\n29: expl\n30: fixed\n31: flat\n32: goeswith\n33: iobj\n34: list\n35: mark\n36: nmod\n37: nmod:desc\n38: nmod:poss\n39: nmod:unmarked\n40: nsubj\n41: nsubj:outer\n42: nsubj:pass\n43: nummod\n44: obj\n45: obl\n46: obl:agent\n47: obl:unmarked\n48: orphan\n49: parataxis\n50: punct\n51: reparandum\n52: root\n53: vocative\n54: xcomp\n'
 
 def is_causal_lm(model_type: str) -> bool:
     causal_models = {"gpt2", "opt", "llama", "qwen2", "gemma2", "bloom", "mistral"}
@@ -30,30 +31,38 @@ def is_causal_lm(model_type: str) -> bool:
         raise ValueError(f"Model type {model_type} is not tested.")
 
 def build_english_prompt_mlm(words, word, mask_str):
-    # return f"""Analyze dependency relations for the sentence below with two requirements: 
-    #         1. 'head' must be the word's position index(integer between 1-{len(words)}) or 0.
-    #         2. 'relation' must be chosen from: {REL_LABELS}.
-    #         Sentence: {sentence}
-    #         Question: What is the head position of the word '{word}'? [MASK]. What is the dependency relation between '{word}' and its head? [MASK].
-    #         """
-    return f"""Analyze the grammatical structure of this sentence:
+    # return f"""Analyze the grammatical structure of this sentence:
+    # Sentence: {" ".join(words)}
+
+    # For the word '{word}':
+    # 1. Head must be its parent word's position index (integer between 1-{len(words)}) or 0.
+    # 2. Dependency relation must be one of: {REL_LABELS}.
+
+    # {word} → head: {mask_str}, rel: {mask_str}."""
+    tmp = ''
+    for idx, w in enumerate(words):
+        tmp += f'{idx}: {w}\n'
+    return f"""Act as a dependency relation analyzing tool. Find the head and dependency relation of the given word in a sentence according to these rules:
+    1. Choose the correct head number from {tmp}.
+    2. Choose the correct dependency relation number from {REL_LABELS_STR}.
+
     Sentence: {" ".join(words)}
-
-    For the word '{word}':
-    1. Head must be its parent word's position index (integer between 1-{len(words)}) or 0.
-    2. Dependency relation must be one of: {REL_LABELS}.
-
-    {word} → head: {mask_str}, rel: {mask_str}."""
+    Word: {word}
+    Response: the head number is {mask_str}, the dependency relation number is {mask_str}."""
 
 def build_english_prompt_clm(words, word):
-    return f"""Analyze the dependency relation for the word "{word}" in the sentence below.
-    Sentence: {" ".join(words)} Follow these rules:
-    1. Head must be its parent word's position index (integer between 1-{len(words)}) or 0.
-    2. Dependency relation must be one of: {REL_LABELS}.
+    tmp = ''
+    for idx, w in enumerate(words):
+        tmp += f'{idx}: {w}\n'
+    return f"""Act as a dependency relation analyzing tool. Find the head and dependency relation of the given word in a sentence according to these rules:
+    1. Choose the correct head number from {tmp}.
+    2. Choose the correct dependency relation number from {REL_LABELS_STR}.
+    3. Do not explain or add extra text.
 
-    Output format:
-    {{head: "<int>", relation: "<label>"}}
-    Output:"""
+    Sentence: {" ".join(words)}
+    Word: {word}
+    Response as a tuple which has exactly two elements: first element is the head number (as a int), second element is the dependency relation number (as a int), e.g. (<head>, <relation>)
+    Response: """
 
 def extract_number(s):
     """从预测文本中提取数字（处理如'4'或'##4'的情况）"""
@@ -95,7 +104,7 @@ def predict_dependency_mlm(model, tokenizer, word, words, error):
         
         # 预测rel
         rel_token = tokenizer.decode(torch.argmax(logits[mask_positions[i+1]]))
-        rel = match_rel_label(rel_token)
+        rel = extract_number(rel_token)
         
         predictions.append((head, rel))
     
@@ -104,7 +113,7 @@ def predict_dependency_mlm(model, tokenizer, word, words, error):
 def predict_dependency_clm(model, tokenizer, word, words, error):
     """预测所有词的head和关系"""
     prompt = build_english_prompt_clm(words, word)
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to('cuda') for k, v in inputs.items()}
 
     with torch.no_grad():
@@ -137,7 +146,7 @@ if __name__ == "__main__":
         "pretrained_models/Llama-3.2-3B-Instruct",
         "pretrained_models/Llama-3.1-8B-Instruct"
     ]
-    model_name = models_name_list[8]
+    model_name = models_name_list[11]
     print(model_name)
     
 
@@ -176,11 +185,12 @@ if __name__ == "__main__":
                         las += 1
             else:
                 predictions = predict_dependency_clm(model, tokenizer, word, words, error)
-                tmp = predictions.split('Output:')[-1].lower()
+                tmp = predictions.split('Response:')[-1].lower()
+                pre_h, pre_r = extract_number(tmp.split(',')[0]), extract_number(tmp.split(',')[-1])
                 # print(predictions.split('Output:')[-1])
-                if tmp.find(str(heads[idx]).lower()) != -1:
+                if heads[idx] == pre_h:
                     uas += 1
-                    if tmp.find(rels[idx].lower()) != -1:
+                    if rels[idx] == pre_r:
                         las += 1
             # bar.set_postfix_str(f"{word} → head: {str(predictions[0][0]).ljust(2)} | rel: {predictions[0][1]}, UAS: {(uas * 100 / total_word_num):.4f}, LAS: {(las * 100 / total_word_num):.4f}")
         bar.set_postfix_str(f"error: {error}, UAS: {(uas * 100 / total_word_num):.4f}, LAS: {(las * 100 / total_word_num):.4f}")
