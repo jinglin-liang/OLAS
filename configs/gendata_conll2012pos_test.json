@@ -1,6 +1,7 @@
 {
     "train_models_name_list": [
-        "pretrained_models/gemma-2-9b-it"
+        "pretrained_models/bert-base-cased"
+        
     ],
     "dataset_name": "conll2012en_entity",
     "cutoff_len": 64,

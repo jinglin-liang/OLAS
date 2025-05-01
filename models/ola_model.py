@@ -1,5 +1,6 @@
 from typing import Tuple, Optional, Union, List, Dict
 from dataclasses import dataclass
+import random
 
 import torch
 import torch.nn as nn
@@ -95,16 +96,17 @@ class OLAModel(nn.Module):
         abandom_base_lm: bool = False,
         ola_augments: Optional[List[Dict]] = None,
         attn_type: str = "ola",
+        load_method: str = "origin",
         **kwargs,
     ):
         super(OLAModel, self).__init__()
-        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm, attn_type)
+        self._init_base_model(base_model_name_list, local_files_only, abandom_base_lm, attn_type, load_method)
         self._init_ola_adaptor(adapter_architecture, num_classes, 
                                use_orders, remove_outliers, outliers_sigma_multiplier, attn_type, **kwargs)
         self._init_learnable_params()
         self._init_ola_augmentation(ola_augments)
 
-    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm, attn_type):
+    def _init_base_model(self, base_model_name_list, local_files_only, abandom_base_lm, attn_type, load_method):
         self.base_model_name_list = base_model_name_list
         self.all_tokenizer = {}
         is_casual_list = []
@@ -123,26 +125,57 @@ class OLAModel(nn.Module):
             tmp_tokenizer.padding_side = "left"  # Allow batched inference
             self.all_tokenizer[tmp_model_name] = tmp_tokenizer
             if len(base_model_name_list) == 1 and not abandom_base_lm:
-                # load base model
-                if config.model_type == 'deberta-v2':
-                    self.base_model = DebertaV2Model.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
-                elif config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
-                    self.base_model = BertModel.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
-                else:
+                if load_method in ["origin", "layer_disorder"]:
+                    # load base model
+                    if config.model_type == 'deberta-v2':
+                        self.base_model = DebertaV2Model.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    elif config._name_or_path in ['pretrained_models/spanbert-base-cased', 'pretrained_models/spanbert-large-cased']:
+                        self.base_model = BertModel.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    else:
+                        model_class = getattr(__import__('transformers'), config.architectures[0])
+                        self.base_model = model_class.from_pretrained(
+                            tmp_model_name, config=config,
+                            local_files_only=local_files_only, 
+                            attn_implementation="eager"
+                        )
+                    if load_method == "layer_disorder":
+                        if config.model_type == 'bert':
+                            encoder_layers = self.base_model.bert.encoder.layer
+                        elif config.model_type == 'roberta':
+                            encoder_layers = self.base_model.roberta.encoder.layer
+                        elif config.model_type == 'electra':
+                            encoder_layers = self.base_model.electra.encoder.layer
+                        elif config.model_type == 'qwen2':
+                            encoder_layers = self.base_model.model.layers
+                        elif config.model_type == 'gemma2':
+                            encoder_layers = self.base_model.model.layers
+                        elif config.model_type == 'llama':
+                            encoder_layers = self.base_model.model.layers
+                        num_layers = len(encoder_layers)
+                        layer_weights = []
+                        for i in range(num_layers):
+                            layer_params = {}
+                            for name, param in encoder_layers[i].named_parameters():
+                                layer_params[name] = param.data.clone()
+                            layer_weights.append(layer_params)
+
+                        random.shuffle(layer_weights)
+
+                        for i in range(num_layers):
+                            for name, param in encoder_layers[i].named_parameters():
+                                if name in layer_weights[i]:
+                                    param.data.copy_(layer_weights[i][name])
+                elif load_method in ["random_all", "random_half"]:
                     model_class = getattr(__import__('transformers'), config.architectures[0])
-                    self.base_model = model_class.from_pretrained(
-                        tmp_model_name, config=config,
-                        local_files_only=local_files_only, 
-                        attn_implementation="eager"
-                    )
+                    self.base_model = model_class(config)
                 if attn_type in ["alti", "rolloutplus"]:
                     self.wrapped_model = ModelWrapper(self.base_model)
                 if attn_type in ["grad", "grad_input", "ig"]:
@@ -237,6 +270,8 @@ class OLAModel(nn.Module):
         task: Optional[str] = "pos",
         attn_type: str = "ola",
         output_tandem: Optional[bool] = False,
+        do_vis: bool = False,
+        calc_flop: bool = False,
         e1_s: Optional[torch.LongTensor] = None,
         e1_e: Optional[torch.LongTensor] = None,
         e2_s: Optional[torch.LongTensor] = None,
@@ -324,6 +359,8 @@ class OLAModel(nn.Module):
         else:
             attn = {k: v.to(self.device) 
                    for k, v in attn.items() if ((attn_type != "ola") or (k in self.use_orders))}
+        if calc_flop:
+            return attn
         # calculate maskes from ola
         attn_mask = cal_maskes(
             attn, attention_mask, 
@@ -347,7 +384,10 @@ class OLAModel(nn.Module):
         )
         if "textcls" in self.adapter_architecture:
             # adaptor forward
-            prediction_scores = self.adaptor(stack_attn_tensor)
+            if do_vis:
+                prediction_scores = None
+            else:
+                prediction_scores = self.adaptor(stack_attn_tensor)
             # calculate loss
             if labels is not None:
                 loss_fct = nn.CrossEntropyLoss()
@@ -430,7 +470,9 @@ class OLAModel(nn.Module):
     def cal_ola_from_text(
         self, 
         text_list: List[str], 
-        cutoff_len: int = 320
+        cutoff_len: int = 320,
+        attn_type: str = 'ola',
+        do_vis: bool = False
     ):
         tokenized_text_ls = [
             self.tokenizer(
@@ -447,9 +489,18 @@ class OLAModel(nn.Module):
             padding=False,
         )
         batch_input = collator_fn(tokenized_text_ls)
-        output = self(
-            **batch_input, 
-            output_attn=True, 
-            output_attentions=True
-        )
+        if attn_type == 'ola':
+            output = self(
+                **batch_input, 
+                output_attn=True, 
+                output_attentions=True,
+                do_vis=do_vis
+            )
+        elif attn_type == 'tandem':
+            output = self(
+                **batch_input, 
+                output_attn=True, 
+                attn_type=attn_type,
+                do_vis=do_vis
+            )
         return output

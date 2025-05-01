@@ -24,6 +24,7 @@ from utils import (
 )
 from data_utils import (
     generate_save_ola_data,
+    calc_flop,
     get_oladata_dir_path,
     DataManager,
 )
@@ -72,28 +73,31 @@ def main():
     # set random seed
     set_seed(training_args.seed)
 
-    # create data manager
-    pad_to_multiple_of = data_args.pad_to_multiple_of if model_args.adapter_architecture != "tokencls_unet" else 32
-    data_manager = DataManager(
-        dataset_name=data_args.dataset_name,
-        cutoff_len=data_args.cutoff_len,
-        train_model_name_or_paths=model_args.train_models_name_list,
-        test_model_name_or_paths=model_args.eval_models_name_list,
-        use_generated_oladata=data_args.use_generated_oladata,
-        attn_type=data_args.attn_type,
-        pad_to_multiple_of=pad_to_multiple_of,
-        do_classify_data_generate=data_args.do_classify_data_generate
-    )
-
-    if data_args.othertest_dataset_name != None:
-        _data_manager = DataManager(
-            dataset_name=data_args.othertest_dataset_name,
+    if not training_args.do_visualize:
+        # create data manager
+        pad_to_multiple_of = data_args.pad_to_multiple_of if model_args.adapter_architecture != "tokencls_unet" else 32
+        data_manager = DataManager(
+            dataset_name=data_args.dataset_name,
             cutoff_len=data_args.cutoff_len,
             train_model_name_or_paths=model_args.train_models_name_list,
             test_model_name_or_paths=model_args.eval_models_name_list,
             use_generated_oladata=data_args.use_generated_oladata,
-            attn_type=data_args.attn_type
+            attn_type=data_args.attn_type,
+            pad_to_multiple_of=pad_to_multiple_of,
+            do_classify_data_generate=data_args.do_classify_data_generate,
+            classify_sentence_len=data_args.classify_sentence_len,
+            classify_sentence_num=data_args.classify_sentence_num
         )
+
+        if data_args.othertest_dataset_name != None:
+            _data_manager = DataManager(
+                dataset_name=data_args.othertest_dataset_name,
+                cutoff_len=data_args.cutoff_len,
+                train_model_name_or_paths=model_args.train_models_name_list,
+                test_model_name_or_paths=model_args.eval_models_name_list,
+                use_generated_oladata=data_args.use_generated_oladata,
+                attn_type=data_args.attn_type
+            )
 
     # do train
     if training_args.do_train:
@@ -199,11 +203,13 @@ def main():
             model_args.use_orders,
             text_list,
             training_args.output_dir,
-            model_args.ola_augments,
+            None,
+            data_args.attn_type,
             data_args.cutoff_len,
             model_args.outliers_sigma_multiplier,
             data_args.visual_annot_size,
-            data_args.visual_label_size
+            data_args.visual_label_size,
+            model_args.load_method
         )
         # visualize_layer_attn_map(
         #     model_args.train_models_name_list,
@@ -229,7 +235,8 @@ def main():
                 use_orders=model_args.use_orders,
                 remove_outliers=True,
                 outliers_sigma_multiplier=3,
-                attn_type=data_args.attn_type
+                attn_type=data_args.attn_type,
+                load_method=model_args.load_method,
             )
             splits = ["train", "test"] if not data_args.do_classify_data_generate else ["train"]
             for split in splits:
@@ -237,7 +244,7 @@ def main():
                     [model_name_or_path], split
                 )
                 gen_data_collator.data_collator.pad_to_multiple_of = None
-                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate)
+                save_dir = get_oladata_dir_path(data_args.dataset_name, model_name_or_path, split, data_args.attn_type, data_args.do_classify_data_generate, model_args.load_method, data_args.classify_sentence_len, data_args.classify_sentence_num, training_args.seed)
                 save_arguments([model_args, data_args, training_args], 
                                 os.path.join(save_dir, "args.json"))
                 generate_save_ola_data(
@@ -247,6 +254,12 @@ def main():
                     save_dir,
                     data_args.attn_type
                 )
+                # calc_flop(
+                #     model,
+                #     gen_dataset,
+                #     gen_data_collator,
+                #     data_args.attn_type
+                # )
             # Explicitly delete the model and clear cache
             del model
             torch.cuda.empty_cache()

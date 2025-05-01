@@ -3,6 +3,7 @@ import inspect
 import lmdb
 import pickle
 from tqdm import tqdm
+from thop import profile
 
 import torch
 from torch.utils.data import DataLoader
@@ -11,7 +12,7 @@ import data_utils
 from data_utils.data import DATASET_NAME_TO_PATH
 
 
-def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_classify_data_generate=False):
+def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_classify_data_generate=False, load_method="origin", classify_sentence_len=50, classify_sentence_num=2000, seed=2025):
     if os.path.isfile(DATASET_NAME_TO_PATH[dataset_name]):
         data_root_dir = os.path.dirname(DATASET_NAME_TO_PATH[dataset_name])
     elif os.path.isdir(DATASET_NAME_TO_PATH[dataset_name]):
@@ -32,7 +33,8 @@ def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_
     elif dataset_name == "conll2012en_entity":
         data_root_dir = data_root_dir + "_en_entity"
     if do_classify_data_generate:
-        data_root_dir = data_root_dir + "_classify"
+        data_root_dir = data_root_dir + "_classify" + "_len" + str(classify_sentence_len) + "_num" + str(classify_sentence_num)
+    data_root_dir = data_root_dir + '_' + load_method + '_seed' + str(seed)
     save_dir = os.path.join(
         data_root_dir, 
         os.path.basename(model_name_or_path),
@@ -117,6 +119,41 @@ def generate_save_ola_data(
     write_cache(env, cache)
     print('save {} samples to {}'.format(cnt, save_dir))
     env.close()
+
+
+def calc_flop(
+    model,
+    dataset,
+    data_collator,
+    attn_type: str = "ola"
+):
+    # create dataloader
+    dataloader = DataLoader(
+        dataset,
+        collate_fn=data_collator,
+        batch_size=1,
+        shuffle=False,
+    )
+    # set model to eval mode
+    model = model.eval().cuda()
+    # generate data
+    interested_keys = inspect.signature(model.forward).parameters.keys()
+    bar = tqdm(dataloader, desc="Calculating FLOP")
+    tot = 0
+    for didx, data in enumerate(bar):
+        if didx == 1000:
+            break
+        if data["input_ids"].shape[-1] == 0:
+            continue
+        with torch.no_grad():
+            input_dict = {k: v for k, v in data.items() if k in interested_keys}
+            input_dict["output_attn"] = True
+            input_dict["labels"] = None
+            input_dict["attn_type"] = attn_type
+            flops, params = profile(model, inputs=(input_dict['input_ids'], input_dict['attention_mask'], input_dict['labels'], None, None, None, None, 'pos', attn_type, False, False, True))
+        tot += flops
+    tot /= 1000
+    print("avg flops =", tot)
 
 
 class OLADataset:
@@ -229,7 +266,7 @@ class OLADataset_conll2012:
         return self.data[idx]
     
 class ClassifyDataset:
-    def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names, named_entities_names, language, task):
+    def __init__(self, sentences, tokenizer, cutoff_len, pos_tags_names=None, named_entities_names=None, language="en", task=None):
         # self.pos_tags_names = pos_tags_names
         # self.named_entities_names = named_entities_names
         self.data = []

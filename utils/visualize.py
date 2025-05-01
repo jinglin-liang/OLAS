@@ -28,24 +28,24 @@ def draw_attn_heatmap(input_map: torch.Tensor,
         show_array = input_map / (input_map.max(axis=1, keepdims=True) + 1e-10) 
     else:
         show_array = input_map
-    plt.title(title)
+    # plt.title(title)
     center = show_array.min() + 0.3 * (show_array.max() - show_array.min())
     ax = sns.heatmap(data=show_array, cmap='rainbow', center=center,
                      vmax=show_array.max(), vmin=show_array.min(), annot=False, 
                      square=True, linewidths=0, cbar_kws={"shrink":.2}, 
                      xticklabels=xtick_ls, yticklabels=ytick_ls)
     # add text
-    for i in range(prob_array.shape[0]):
-        for j in range(prob_array.shape[1]):
-            fw = 'normal'
-            ax.text(j + 0.5, i + 0.5, 
-                    custom_fmt(input_map[i, j], prob_array[i, j]),
-                    ha='center', va='center', 
-                    fontsize=annot_size, fontweight=fw)
+    # for i in range(prob_array.shape[0]):
+    #     for j in range(prob_array.shape[1]):
+    #         fw = 'normal'
+    #         ax.text(j + 0.5, i + 0.5, 
+    #                 custom_fmt(input_map[i, j], prob_array[i, j]),
+    #                 ha='center', va='center', 
+    #                 fontsize=annot_size, fontweight=fw)
     ax.set_xticklabels(ax.get_xticklabels(), fontsize=label_size)
     ax.set_yticklabels(ax.get_yticklabels(), fontsize=label_size)
-    plt.xlabel('K')
-    plt.ylabel('Q')
+    # plt.xlabel('K')
+    # plt.ylabel('Q')
 
 
 def visualize_attn_map(
@@ -54,10 +54,12 @@ def visualize_attn_map(
     text_list: List[str],
     output_dir: str,
     ola_augments: Optional[List[dict]] = None,
+    attn_type: str = 'ola',
     cutoff_len: int = 320,
     outliers_sigma_multiplier: float = 3.0,
     annot_size: int = 1,
     label_size: int = 3,
+    load_method: str = 'origin'
 ):
     ola_dict = {}
     ola_mask_dict = {}
@@ -72,15 +74,18 @@ def visualize_attn_map(
             remove_outliers=False,
             outliers_sigma_multiplier=outliers_sigma_multiplier,
             ola_augments=ola_augments,
+            attn_type=attn_type,
+            load_method=load_method
         ).train().cuda()
         model_dict[tmp_model_name] = tmp_model
         ola_list = []
         ola_mask_list = []
         with torch.no_grad():
             for tmp_text in text_list:
-                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len)
+                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len, attn_type, do_vis=True)
                 ola, ola_mask = tmp_output.order_level_attention, tmp_output.ola_maskes
-                ola = {k: v.cpu() for k, v in ola.items()}
+                # ola = {k: v.cpu() for k, v in ola.items()}
+                ola = {k: (v / (v.sum(dim=-1, keepdim=True) + 1e-10)).cpu() for k, v in ola.items()}
                 ola_list.append(ola)
                 for k, v in ola_mask.items():
                     if isinstance(v, torch.Tensor):
@@ -97,7 +102,7 @@ def visualize_attn_map(
         for order in use_orders:
             title = f"Text: {text_list[text_id]}"
             title = title.split(" ")
-            row_words = 40
+            row_words = 20
             title = [" ".join(title[i*row_words:(i+1)*row_words]) for i in range(math.ceil(len(title)/row_words))]
             title = "\n".join(title)
             title += f"\nOrder: {order}"
@@ -162,7 +167,7 @@ def visualize_layer_attn_map(
         layer_attn_list = []
         with torch.no_grad():
             for tmp_text in text_list:
-                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len)
+                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len, do_vis=True)
                 layer_attn = tmp_output.layer_attentions
                 layer_attn = {k: v.mean(dim=1, keepdims=True).cpu() for k, v in enumerate(layer_attn)}
                 layer_attn_list.append(layer_attn)

@@ -257,7 +257,6 @@ class UniversalDependenciesDatasetReader(object):
 
         return "\n".join(output_lines) + "\n\n"
 
-
 def load_raw_data(data_name: str):
     '''
     return (train_data, test_data), standardize_function

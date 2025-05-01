@@ -81,6 +81,12 @@ class ModelArguments:
             "help": "Whether to only use local files and not download from the internet."
         },
     )
+    load_method: str = field(
+        default='origin',
+        metadata={
+            "help": "How to load the base model.choices=['origin', 'random_all', 'random_half', 'layer_disorder']"
+        },
+    )
     use_orders: List[int] = field(
         default_factory=lambda: [1, 2, 3],
         metadata={"help": "The orders of attention maps to use."},
@@ -282,6 +288,14 @@ class DataArguments:
     do_classify_data_generate: bool = field(
         default=False,
         metadata={"help": "Whether to do classify data generate."},
+    )
+    classify_sentence_len: int = field(
+        default=50,
+        metadata={"help": "The length of the data for classification."},
+    )
+    classify_sentence_num: int = field(
+        default=2000,
+        metadata={"help": "The number of the data for classification."},
     )
 
     def __post_init__(self):
