@@ -1,0 +1,17 @@
+{
+    "train_models_name_list": [
+        "pretrained_models/gemma-2-2b-it"
+    ],
+    "dataset_name": "ud_english_ewt",
+    "task": "dp",
+    "cutoff_len": 64,
+    "do_train": false,
+    "do_eval": false,
+    "do_visualize": false,
+    "do_gen_save_ola": true,
+    "use_orders": [
+        1,
+        2,
+        3
+    ]
+}

@@ -73,8 +73,6 @@ def generate_save_ola_data(
     cache = {}
     for didx, data in enumerate(bar):
         
-        if didx <28:
-            continue
         if data["input_ids"].shape[-1] == 0:
             continue
         with torch.no_grad():
@@ -126,7 +124,10 @@ class OLADataset:
         self.env = lmdb.open(data_dir, max_readers=8, readonly=True, lock=False, readahead=True, meminit=True)
         with self.env.begin(write=False) as txn:
             self.num_samples = int(txn.get('num_samples'.encode('utf-8')).decode("utf-8"))
-            self.features = pickle.loads(txn.get('features'.encode('utf-8')))
+            try:
+                self.features = pickle.loads(txn.get('features'.encode('utf-8')))
+            except:
+                pass
 
     def __len__(self):
         return self.num_samples

@@ -82,15 +82,19 @@ class PartPaddingDataCollator:
             tgt_len = batch["input_ids"].shape[1]
             begin_mask = torch.zeros((len(batch["begin_mask"]), tgt_len))
             for i, tmp_begin_mask in enumerate(batch["begin_mask"]):
-                begin_mask[i, -len(tmp_begin_mask):] = tmp_begin_mask
+                begin_mask[i, -len(tmp_begin_mask):] = torch.tensor(tmp_begin_mask)
             batch["begin_mask"] = begin_mask.bool()
         if "heads" in batch.keys():
             tgt_len = batch["input_ids"].shape[1]
             heads = torch.zeros((len(batch["heads"]), tgt_len)).fill_(-200)
             for i, tmp_heads in enumerate(batch["heads"]):
+                tmp_heads = torch.tensor(tmp_heads)
                 assert tmp_heads.max() < batch["attention_mask"][i].sum().item()
                 adjust_heads = tmp_heads.clone()
-                adjust_heads[adjust_heads != -100] += (1 - batch["attention_mask"][i]).sum().item()
+                for j in range(len(adjust_heads)):
+                    if adjust_heads[j] != -100 and adjust_heads[j] != -200:
+                        adjust_heads[j]  += (1 - batch["attention_mask"][i]).sum().item()
+                # adjust_heads[adjust_heads != -100] += (1 - batch["attention_mask"][i]).sum().item()
                 heads[i, -len(adjust_heads):] = adjust_heads
             assert heads.max() < tgt_len
             batch["heads"] = heads.long()
@@ -98,6 +102,7 @@ class PartPaddingDataCollator:
             tgt_len = batch["input_ids"].shape[1]
             dp_rels = torch.zeros((len(batch["dp_rels"]), tgt_len)).fill_(-200)
             for i, tmp_dp_rels in enumerate(batch["dp_rels"]):
+                tmp_dp_rels = torch.tensor(tmp_dp_rels)
                 dp_rels[i, -len(tmp_dp_rels):] = tmp_dp_rels
             batch["dp_rels"] = dp_rels.long()
         batch["task"] = self.task

@@ -16,6 +16,7 @@ DATASET_NAME_TO_PATH = {
     "conll2012cn_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
     "conll2012en_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
     "semeval_re": "datasets/sem_eval_2010_task_8/data",
+    "ud_english_ewt": "datasets/ud_english_ewt",
 }
 
 

@@ -1,4 +1,4 @@
-GPU_LIST=('0' '2')
+GPU_LIST=('2' '3')
 PID_LIST=()
 FREE_GPUS=()
 NUM_GPUS_PER_TASK=1
@@ -46,9 +46,9 @@ gpu_monitor(){
 
 date
 echo ------------------- start training ------------------------
-for LR in '1e-5' '3e-5' '1e-4' '3e-4';
+for LR in '1e-5' '3e-5' '1e-4';
 do
-    for CFG in 'configs/train_roberta_base_udewt_dp.json' 'configs/train_electra_base_udewt_dp.json';
+    for CFG in 'configs/train_gemma2_9b_udewt_dp.json' 'configs/train_llama3_1_8b_udewt_dp.json';
     do
         while true
         do
@@ -58,7 +58,7 @@ do
             then
                 LOG_FILE=outputs/logs/CFG_${CFG:8:20}_LR_${LR}_udp.log
                 {
-                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR >> $LOG_FILE 2>&1
+                    CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${FREE_GPUS[*]}") nohup python main.py $CFG --learning_rate $LR --use_generated_oladata true >> $LOG_FILE 2>&1
                 } &
                 training_pid=$!
                 for used_gpu in "${FREE_GPUS[@]}"; do

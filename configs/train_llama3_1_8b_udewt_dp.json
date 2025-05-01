@@ -1,7 +1,7 @@
 {
     "use_generated_oladata": false,
     "train_models_name_list": [
-        "pretrained_models/Qwen2-1.5B-Instruct"
+        "pretrained_models/Llama-3.1-8B-Instruct"
     ],
     "eval_models_name_list": [
         "pretrained_models/Qwen2-1.5B-Instruct",
@@ -11,19 +11,18 @@
         "pretrained_models/Llama-3.2-3B-Instruct",
         "pretrained_models/Llama-3.1-8B-Instruct"
     ],
-    "adapter_architecture": "re_axialtranformer",
-    "dataset_name": "semeval_re",
-    "task": "re",
+    "adapter_architecture": "dp_axialtranformer",
+    "dataset_name": "ud_english_ewt",
+    "task": "dp",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
     "do_eval": true,
     "num_train_epochs": 15,
-    "learning_rate": 1e-5,
+    "learning_rate": 1e-4,
     "per_device_train_batch_size": 2,
     "per_device_eval_batch_size": 8,
     "save_steps": 0.2,
     "use_orders": [1, 2],
-    "adapter_hidden_size": 512,
-    "sp_aug": "qwen"
+    "sp_aug": "llama"
 }

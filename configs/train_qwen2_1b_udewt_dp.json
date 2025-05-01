@@ -11,9 +11,9 @@
         "pretrained_models/Llama-3.2-3B-Instruct",
         "pretrained_models/Llama-3.1-8B-Instruct"
     ],
-    "adapter_architecture": "re_axialtranformer",
-    "dataset_name": "semeval_re",
-    "task": "re",
+    "adapter_architecture": "dp_axialtranformer",
+    "dataset_name": "ud_english_ewt",
+    "task": "dp",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
