@@ -34,7 +34,7 @@ def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_
         data_root_dir = data_root_dir + "_en_entity"
     if do_classify_data_generate:
         data_root_dir = data_root_dir + "_classify" + "_len" + str(classify_sentence_len) + "_num" + str(classify_sentence_num)
-    data_root_dir = data_root_dir + '_' + load_method + '_seed' + str(seed)
+        data_root_dir = data_root_dir + '_' + load_method + '_seed' + str(seed)
     save_dir = os.path.join(
         data_root_dir, 
         os.path.basename(model_name_or_path),

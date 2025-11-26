@@ -89,16 +89,6 @@ def main():
             classify_sentence_num=data_args.classify_sentence_num
         )
 
-        if data_args.othertest_dataset_name != None:
-            _data_manager = DataManager(
-                dataset_name=data_args.othertest_dataset_name,
-                cutoff_len=data_args.cutoff_len,
-                train_model_name_or_paths=model_args.train_models_name_list,
-                test_model_name_or_paths=model_args.eval_models_name_list,
-                use_generated_oladata=data_args.use_generated_oladata,
-                attn_type=data_args.attn_type
-            )
-
     # do train
     if training_args.do_train:
         # save arguments
@@ -125,12 +115,6 @@ def main():
         train_dataset, data_collator = data_manager.get_dataset_collator(
             model_args.train_models_name_list, "train", training_args.task
         )
-
-        # debug
-        # debug_loader = DataLoader(train_dataset, batch_size=2, collate_fn=data_collator)
-        # for _ in range(2):
-        #     for i, batch in enumerate(debug_loader):
-        #         print(i)
 
         # prepare args for eval during checkpointing
         args_for_eval = [
@@ -212,20 +196,7 @@ def main():
             data_args.visual_label_size,
             model_args.load_method
         )
-        # visualize_layer_attn_map(
-        #     model_args.train_models_name_list,
-        #     model_args.use_orders,
-        #     text_list,
-        #     training_args.output_dir,
-        #     model_args.ola_augments,
-        #     model_args.adapter_hidden_size,
-        #     model_args.num_layers,
-        #     data_args.cutoff_len,
-        #     model_args.outliers_sigma_multiplier,
-        #     data_args.visual_annot_size,
-        #     data_args.visual_label_size
-        # )
-
+    
     # do ola data generation
     if training_args.do_gen_save_ola:
         for model_name_or_path in model_args.eval_models_name_list:
@@ -255,12 +226,6 @@ def main():
                     save_dir,
                     data_args.attn_type
                 )
-                # calc_flop(
-                #     model,
-                #     gen_dataset,
-                #     gen_data_collator,
-                #     data_args.attn_type
-                # )
             # Explicitly delete the model and clear cache
             del model
             torch.cuda.empty_cache()

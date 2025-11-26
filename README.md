@@ -92,6 +92,13 @@ per_device_eval_batch_size
 use_orders
 ```
 
+## Train Classifier
+python main.py configs/gendata_conll2012_mlm.json --do_classify_data_generate
+python classify.py
+
+## Do mapping
+python map_metric.py
+
 ## Todo 
 
 - [ ] 对text chunking任务实现P，R，F1评价指标
