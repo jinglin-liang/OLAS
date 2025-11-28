@@ -1,9 +1,5 @@
 {
-    "use_generated_oladata": true,
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
-    ],
-    "eval_models_name_list": [
         "pretrained_models/bert-base-cased",
         "pretrained_models/bert-large-cased",
         "pretrained_models/roberta-base",
@@ -11,16 +7,16 @@
         "pretrained_models/electra-base-generator",
         "pretrained_models/electra-large-generator"
     ],
-    "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2000_pos",
+    "task": "pos",
     "cutoff_len": 64,
-    "logging_steps": 10,
-    "do_train": true,
+    "do_train": false,
     "do_eval": false,
-    "num_train_epochs": 15,
-    "learning_rate": 1e-5,
-    "per_device_train_batch_size": 2,
-    "per_device_eval_batch_size": 8,
-    "save_steps": 0.2,
-    "use_orders": [1, 2]
+    "do_visualize": false,
+    "do_gen_save_ola": true,
+    "use_orders": [
+        1,
+        2,
+        3
+    ]
 }

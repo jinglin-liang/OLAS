@@ -1,5 +1,4 @@
 {
-    "use_generated_oladata": false,
     "train_models_name_list": [
         "pretrained_models/roberta-large"
     ],
@@ -17,6 +16,5 @@
     "do_train": false,
     "do_eval": true,
     "per_device_eval_batch_size": 2,
-    "eval_adapter_checkpoint": "outputs/20250329_164721/checkpoint-75264/ola_adapter_weight.bin",
-    "attn_type": "ola"
+    "eval_adapter_checkpoint": "outputs/20250329_164721/checkpoint-75264/ola_adapter_weight.bin"
 }

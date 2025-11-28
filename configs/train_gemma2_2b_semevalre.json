@@ -1,5 +1,5 @@
 {
-    "use_generated_oladata": false,
+    "use_generated_oladata": true,
     "train_models_name_list": [
         "pretrained_models/gemma-2-2b-it"
     ],
@@ -23,6 +23,9 @@
     "per_device_train_batch_size": 2,
     "per_device_eval_batch_size": 8,
     "save_steps": 0.2,
-    "use_orders": [1, 2],
+    "use_orders": [
+        1,
+        2
+    ],
     "sp_aug": "gemma"
 }

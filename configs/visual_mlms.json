@@ -1,5 +1,5 @@
 {
-    "visual_text_file": "datasets/visualize/final.txt",
+    "visual_text_file": "datasets/visualize/samples.txt",
     "train_models_name_list": [
         "pretrained_models/bert-base-cased",
         "pretrained_models/roberta-base",

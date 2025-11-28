@@ -13,6 +13,7 @@
     ],
     "adapter_architecture": "tokencls_axialtranformer",
     "dataset_name": "conll2000_pos",
+    "task": "pos",
     "cutoff_len": 64,
     "logging_steps": 10,
     "do_train": true,
@@ -22,5 +23,8 @@
     "per_device_train_batch_size": 2,
     "per_device_eval_batch_size": 8,
     "save_steps": 0.2,
-    "use_orders": [1, 2]
+    "use_orders": [
+        1,
+        2
+    ]
 }

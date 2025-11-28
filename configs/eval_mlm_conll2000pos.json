@@ -1,12 +1,17 @@
 {
     "train_models_name_list": [
-        "pretrained_models/roberta-base"
+        "pretrained_models/roberta-large"
     ],
     "eval_models_name_list": [
+        "pretrained_models/bert-base-cased",
+        "pretrained_models/bert-large-cased",
+        "pretrained_models/roberta-base",
+        "pretrained_models/roberta-large",
         "pretrained_models/electra-base-generator",
         "pretrained_models/electra-large-generator"
     ],
     "dataset_name": "conll2000_pos",
+    "task": "pos",
     "cutoff_len": 64,
     "do_train": false,
     "do_eval": true,
