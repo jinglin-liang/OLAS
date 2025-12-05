@@ -1,10 +1,10 @@
 import copy
-import logging
-import json
 import os
 from tqdm import tqdm
 import numpy as np
 import random
+import argparse
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import lmdb, pickle
 
@@ -14,7 +14,6 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
-from transformers import set_seed
 
 from convs.cifar_resnet import resnet32
 from convs.resnet import resnet18, resnet34, resnet50
@@ -22,43 +21,10 @@ from convs.ucir_cifar_resnet import resnet32 as cosine_resnet32
 from convs.ucir_resnet import resnet18 as cosine_resnet18
 from convs.ucir_resnet import resnet34 as cosine_resnet34
 from convs.ucir_resnet import resnet50 as cosine_resnet50
-from convs.linears import SimpleLinear, SplitCosineLinear, CosineLinear
+from convs.linears import SimpleLinear
 from convs.modified_represnet import resnet18_rep,resnet34_rep
 from convs.resnet_cbam import resnet18_cbam,resnet34_cbam,resnet50_cbam
 
-from typing import Tuple
-import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-import sys
-import json
-import matplotlib.pyplot as plt
-
-import torch
-from torch.utils.data import DataLoader
-from transformers import (
-    set_seed,
-    HfArgumentParser,
-)
-
-from utils import (
-    ADAPTERS_CKPT_NAME,
-    save_arguments,
-    visualize_attn_map,
-    TextClsMetric,
-    TokenClsMetric,
-    MultiTokenMetric,
-    ModelArguments, 
-    DataArguments, 
-    OLALMTrainingArguments as TrainingArguments,
-    OLALMTrainer,
-)
-from utils.visualize import draw_attn_heatmap
-from data_utils import (
-    generate_save_ola_data,
-    get_oladata_dir_path,
-    DataManager,
-)
-from models.ola_model import OLAModel
 from models.ola_utils import cal_maskes
 from models.ola_model import preprocess_ola
 from models.ola_augmentations import (
@@ -66,38 +32,6 @@ from models.ola_augmentations import (
     AddGuassianNoise,
     RandomTemperatureScaling
 )
-
-
-def args_parser() -> Tuple[ModelArguments, DataArguments, TrainingArguments]:
-    parser = HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments)
-    )
-    json_args_dict = {}
-    other_args = []
-    # if the first argument is a JSON file, parse it
-    if len(sys.argv) > 1 and sys.argv[1].endswith(".json"):
-        with open(os.path.abspath(sys.argv[1]), 'r') as f:
-            json_args_dict = json.load(f)
-        other_args = sys.argv[2:]
-    else:
-        other_args = sys.argv[1:]
-    # convert json args to list
-    json_args_list = []
-    for key, value in json_args_dict.items():
-        if value is None:
-            continue
-        json_args_list.append(f"--{key}")
-        if isinstance(value, list):
-            json_args_list.extend(map(str, value))
-        else:
-            json_args_list.append(str(value))
-    # combine json args and other args, other args have higher priority
-    combined_args = json_args_list + other_args
-    # parse arguments
-    model_args, data_args, training_args = (
-        parser.parse_args_into_dataclasses(combined_args)
-    )
-    return model_args, data_args, training_args
 
 
 def get_convnet(args, pretrained=False):
@@ -169,6 +103,7 @@ class BaseNet(nn.Module):
 
         return self
     
+    
 class DataIter(object):
     def __init__(self, dataloader):
         self.dataloader = dataloader
@@ -181,6 +116,7 @@ class DataIter(object):
             self._iter = iter(self.dataloader)
             data = next( self._iter )
         return data
+
 
 class ClassifyDataset(Dataset):
     def __init__(self, data_dirs, selected_orders, is_casual=False, use_augment=True, sentence_len=100, sentence_num_perdir=1000):
@@ -243,23 +179,23 @@ class ClassifyDataset(Dataset):
     def _init_ola_augmentation(self, use_augment):
         if use_augment:
             ola_augments = [
-                        {
-                            "class_name": "RandomHightlightColumns",
-                            "params": {
-                                "p": 0.3,
-                                "min_columns": 1,
-                                "max_columns": 3,
-                                "ref_rank1": 0,
-                                "ref_rank2": 1
-                            }
-                        },
-                        {
-                            "class_name": "AddGuassianNoise",
-                            "params": {
-                                "p": 0.15,
-                                "std_ratio": 0.13
-                            }
-                        },
+                {
+                    "class_name": "RandomHightlightColumns",
+                    "params": {
+                        "p": 0.3,
+                        "min_columns": 1,
+                        "max_columns": 3,
+                        "ref_rank1": 0,
+                        "ref_rank2": 1
+                    }
+                },
+                {
+                    "class_name": "AddGuassianNoise",
+                    "params": {
+                        "p": 0.15,
+                        "std_ratio": 0.13
+                    }
+                },
             ]
         else:
             ola_augments = None
@@ -273,6 +209,7 @@ class ClassifyDataset(Dataset):
                 )
         else:
             self.ola_augments = None
+
 
 def _compute_accuracy(model, loader, model_names):
     model.eval()
@@ -290,6 +227,7 @@ def _compute_accuracy(model, loader, model_names):
         total += len(targets)
     return np.around(correct.cpu().data.numpy() * 100 / total, decimals=2), cor_model_dict
 
+
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -297,36 +235,53 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     cudnn.deterministic = True
-if __name__ == "__main__":
-    setup_seed(2025)
 
-    # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-    ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
-    train_model_ids = [3,4,5,6]
-    test_model_ids = [1,2]
-    train_model_names = [ams[i] for i in train_model_ids]
-    test_model_names = [ams[i] for i in test_model_ids]
-    selected_orders = [1]
-    num_classes = 1000
-    dataset_len = 2000
-    sentence_len = 80
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=2025, help='random seed')
+    parser.add_argument('--lr', type=float, default=0.007, help='learning rate')
+    parser.add_argument('--num_classes', type=int, default=1000, help='number of classes')
+    parser.add_argument('--sentence_len', type=int, default=50, help='sentence length')
+    parser.add_argument('--dataset_len', type=int, default=2000, help='dataset length')
+    parser.add_argument('--train_model_names', type=str, nargs='+', choices=[
+            'bert-base-cased', 'bert-large-cased', 
+            'roberta-base', 'roberta-large',
+            'electra-base-generator', 'electra-large-generator',
+            'Qwen2-1.5B-Instruct', 'Qwen2-7B-Instruct', 
+            'gemma-2-2b-it', 'gemma-2-9b-it', 
+            'Llama-3.2-3B-Instruct', 'Llama-3.1-8B-Instruct'
+        ], help='training model names')
+    parser.add_argument('--test_model_names', type=str, nargs='+', choices=[
+            'bert-base-cased', 'bert-large-cased', 
+            'roberta-base', 'roberta-large',
+            'electra-base-generator', 'electra-large-generator',
+            'Qwen2-1.5B-Instruct', 'Qwen2-7B-Instruct', 
+            'gemma-2-2b-it', 'gemma-2-9b-it', 
+            'Llama-3.2-3B-Instruct', 'Llama-3.1-8B-Instruct'
+        ], help='testing model names')
+    parser.add_argument('--selected_orders', type=int, nargs='+', default=[1], help='selected OLA orders')
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    setup_seed(args.seed)
+    train_model_names = args.train_model_names
+    test_model_names = args.test_model_names
+    selected_orders = args.selected_orders
     use_augment = True
     attn_type = 'ola'
-    lr = 0.007
     dataset = f"conll2012_{attn_type}_en_entity"
-    # dataset = f"imdb_{attn_type}"
-    load_method = "origin"
-    if load_method == 'origin':
-        addition = f"_num{dataset_len}_origin" if attn_type == 'ola' else ""
-    else:
-        addition = f"_num1000_{load_method}_seed2025"
+    addition = f"_num2000_origin_seed2025"
 
-    train_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in train_model_names]
-    test_data_dir_paths = [f'datasets/{dataset}_classify_len{sentence_len}{addition}/{model_name}/train' for model_name in test_model_names]
-    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
-    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=num_classes)
+    train_data_dir_paths = [f'datasets/{dataset}_classify_len{args.sentence_len}{addition}/{model_name}/train' for model_name in train_model_names]
+    test_data_dir_paths = [f'datasets/{dataset}_classify_len{args.sentence_len}{addition}/{model_name}/train' for model_name in test_model_names]
+    train_dataset = ClassifyDataset(train_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=args.sentence_len, sentence_num_perdir=args.num_classes)
+    test_dataset = ClassifyDataset(test_data_dir_paths, selected_orders, use_augment=use_augment, sentence_len=args.sentence_len, sentence_num_perdir=args.num_classes)
     print(f"train_dataset_len = {len(train_dataset)}, test_dataset_len = {len(test_dataset)}")
-    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
+    print(f"attn_type: {attn_type}, lr: {args.lr}, use_augment: {use_augment}, num_classes: {args.num_classes}, sentence_len: {args.sentence_len}")
     print(selected_orders)
     print(dataset)
 
@@ -348,11 +303,10 @@ if __name__ == "__main__":
     model_args = dict()
     model_args['net'] = "resnet18"
     model_args['input_channels'] = len(selected_orders)
-    model = BaseNet(model_args, num_classes=num_classes)
+    model = BaseNet(model_args, num_classes=args.num_classes)
         
     model.train().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
     train_acc = test_acc = best_acc = 0
     pbar = tqdm(range(100000), desc="train classifier")
@@ -383,7 +337,6 @@ if __name__ == "__main__":
 
     print(f"best_acc={best_acc}")
     print(best_cor_model_dict)
-    print(f"attn_type: {attn_type}, lr: {lr}, use_augment: {use_augment}, num_classes: {num_classes}, sentence_len: {sentence_len}")
+    print(f"attn_type: {attn_type}, lr: {args.lr}, use_augment: {use_augment}, num_classes: {args.num_classes}, sentence_len: {args.sentence_len}")
     print(selected_orders)
     print(dataset)
-    

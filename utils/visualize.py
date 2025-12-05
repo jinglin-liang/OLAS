@@ -68,7 +68,7 @@ def visualize_attn_map(
     for tmp_model_name in visual_models_name_list:
         tmp_model = OLAModel(
             base_model_name_list=[tmp_model_name,],
-            adapter_architecture="textcls_resnet18",
+            adapter_architecture="tokencls_axialtranformer",
             num_classes=2,
             use_orders=use_orders,
             remove_outliers=False,
@@ -82,7 +82,7 @@ def visualize_attn_map(
         ola_mask_list = []
         with torch.no_grad():
             for tmp_text in text_list:
-                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len, attn_type, do_vis=True)
+                tmp_output = tmp_model.cal_ola_from_text([tmp_text], cutoff_len, do_vis=True)
                 ola, ola_mask = tmp_output.order_level_attention, tmp_output.ola_maskes
                 # ola = {k: v.cpu() for k, v in ola.items()}
                 ola = {k: (v / (v.sum(dim=-1, keepdim=True) + 1e-10)).cpu() for k, v in ola.items()}

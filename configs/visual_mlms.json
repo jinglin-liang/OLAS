@@ -1,5 +1,5 @@
 {
-    "visual_text_file": "datasets/visualize/samples.txt",
+    "visual_text_file": "assets/samples.txt",
     "train_models_name_list": [
         "pretrained_models/bert-base-cased",
         "pretrained_models/roberta-base",
@@ -9,7 +9,9 @@
     "do_eval": false,
     "do_visualize": true,
     "use_orders": [
-        1
+        1,
+        2,
+        3
     ],
     "cutoff_len": 64,
     "visual_annot_size": 1,

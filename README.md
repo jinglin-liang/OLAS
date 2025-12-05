@@ -23,119 +23,152 @@ This repository is the official PyTorch implementation of:
 ```bash
 pip install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
 ```
-Then install CLIP from the official [CLIP](https://github.com/openai/CLIP) repository.
 
 ### Prepare Data
-The program will automatically download the CIFAR-100 dataset. You only need to download the Tiny ImageNet dataset using the following commands.
-```bash
-cd data
-wget http://cs231n.stanford.edu/tiny-imagenet-200.zip
-unzip tiny-imagenet-200.zip
-python preprocess.py
-cd ..
-```
+Create a folder named 'datasets', download the dataset, and place it under the file structure as shown below.
+>datasets
+|-- [UD_English-EWT](https://lindat.mff.cuni.cz/repository/items/48b5bcf3-697e-4924-bb2f-29f189491889)
+|-- [conll2000](https://huggingface.co/datasets/eriktks/conll2000)
+|-- [conll2012](https://huggingface.co/datasets/ontonotes/conll2012_ontonotesv5)
+|-- [sem_eval_2010_task_8](https://huggingface.co/datasets/SemEvalWorkshop/sem_eval_2010_task_8)
 
-## 🍔 Pre-trained Model
-We use the pretrained diffusion model from [LDM](https://github.com/CompVis/latent-diffusion) repository, you can simply use the following command to obtain the pre-trained model.
-```bash
-mkdir -p models/ldm/text2img-large
-wget -O models/ldm/text2img-large/model.ckpt https://ommer-lab.com/files/latent-diffusion/nitro/txt2img-f8-large/model.ckpt
-```
 
-Please download bert-base-uncased from [here](https://huggingface.co/google-bert/bert-base-uncased), and put it in models/bert.
+### Pre-trained Model
+Download the pretrained models and place them in the newly created "pretrained_models" folder.
+> pretrained_models
+|-- [bert-base-cased](https://huggingface.co/google-bert/bert-base-cased)
+|-- [bert-large-cased](https://huggingface.co/google-bert/bert-large-cased)
+|-- [roberta-base](https://huggingface.co/FacebookAI/roberta-base)
+|-- [roberta-large](https://huggingface.co/FacebookAI/roberta-large)
+|-- [electra-base-generator](https://huggingface.co/google/electra-base-generator)
+|-- [electra-large-generator](https://huggingface.co/google/electra-large-generator)
+|-- [gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it)
+|-- [gemma-2-9b-it](https://huggingface.co/google/gemma-2-9b-it)
+|-- [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct)
+|-- [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
+|-- [Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+|-- [Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
 
-## Qualitative Empirical Evidence of OLAS
+## 📺 Qualitative Empirical Evidence of OLAS
+
+Run the code below to visualize OLA. An example of the visualization result is shown in the figure below.
 
 ```bash
 python main.py configs/visual_clms.json
 ```
 
-## Quantitative Empirical Evidence of OLAS 
+![](assets/qualitative.png)
+
+## 🍔 Quantitative Empirical Evidence of OLAS 
 
 ### Quantitative Analysis Based on Visual Model
 
-python main.py configs/gendata_conll2012_mlm.json --do_classify_data_generate
-python classify.py
+**First, run the following code to generate the OLA data for quantitatively evaluating cross-model similarity.**
+
+- CLMs
+
+```bash
+python main.py configs/gendata_clm_conll2012en_entity.json --do_classify_data_generate
+```
+- MLMs
+
+```bash
+python main.py configs/gendata_mlm_conll2012en_entity.json --do_classify_data_generate
+```
+
+**Then, run the following code to train the visual model and perform the objective similarity evaluation.** The 'train_model_names' and 'test_model_name' parameters allow you to specify the source model(s) and the target model(s), respectively.
+
+- CLMs
+
+```bash
+python olas_visual_model.py \
+  --train_model_names \
+  Qwen2-1.5B-Instruct Qwen2-7B-Instruct Llama-3.2-3B-Instruct Llama-3.1-8B-Instruct \
+  --test_model_names \
+  gemma-2-2b-it gemma-2-9b-it
+```
+
+- MLMs
+
+```bash
+python olas_visual_model.py \
+  --train_model_names \
+  bert-base-cased bert-large-cased roberta-base roberta-large \
+  --test_model_names \
+  electra-base-generator electra-large-generator
+```
 
 ###  Quantitative Analysis Based on Image Similarity Retrieval
 
-python map_metric.py
+- CLMs
 
-##  Transferable OLA Adapter
+```bash
+python olas_retrieval.py \
+  --src_model Qwen2-1.5B-Instruct \
+  --tgt_model Llama-3.2-3B-Instruct
+```
+
+- MLMs
+
+```bash
+python olas_retrieval.py \
+  --src_model bert-base-cased \
+  --tgt_model electra-base-generator
+```
+
+## 🚀 Transferable OLA Adapter
 
 ### Training
 
-1. Train from raw dataset, only support training adapter for one LLM
+**First, run the following code to generate the OLA dataset.**
+
+- CLMs
 
 ```bash
-python main.py configs/train_qwen_1b_conll2000pos.json
-```
-key arguments: 
-```bash
-train_models_name_list
-adapter_architecture
-dataset_name
-cutoff_len
-use_orders
-logging_steps
-num_train_epochs
-learning_rate
-per_device_train_batch_size
-save_steps
+python main.py configs/gendata_clm_conll2012en_entity.json
 ```
 
-2. Train from generated ola dataset
-
-Firstly, generate ola data
+- MLMs
 
 ```bash
-python main.py configs/gendata_all_conll2000pos.json
+python main.py configs/gendata_mlm_conll2012en_entity.json
 ```
 
-key arguments: 
-```bash
-train_models_name_list
-dataset_name
-cutoff_len
-use_orders
-```
+**Secondly, train ola adapter using generated ola data**
 
-Secondly, train ola adapter using generated ola data
+- CLMs
 
 ```bash
-python main.py configs/train_qwen_1b_conll2000pos_ola.json
-```
-or
-```bash
-python main.py configs/train_qwen_1b_conll2000pos.json --use_generated_oladata true
+CUDA_VISIBLE_DEVICES=0 python main.py configs/train_qwen_1b_conll2000pos.json --use_generated_oladata true
 ```
 
-key arguments: 
+- MLMs
+
 ```bash
-train_models_name_list
-adapter_architecture
-dataset_name
-cutoff_len
-use_orders
-logging_steps
-num_train_epochs
-learning_rate
-per_device_train_batch_size
-save_steps
+CUDA_VISIBLE_DEVICES=0 python main.py configs/train_bert_base_conll2012en_entity.json --use_generated_oladata true
 ```
 
 ## Testing
 
+- CLMs
+
 ```bash
-python main.py configs/eval_qwen_1b_conll2000pos.json
+CUDA_VISIBLE_DEVICES=0 python main.py configs/eval_clm_conll2012en_entity.json --eval_adapter_checkpoint path_to/ola_adapter_weight.bin
 ```
 
-key arguments: 
+- MLMs
+
 ```bash
-eval_models_name_list
-adapter_architecture
-dataset_name
-cutoff_len
-per_device_eval_batch_size
-use_orders
+CUDA_VISIBLE_DEVICES=0 python main.py configs/eval_mlm_conll2012en_entity.json --eval_adapter_checkpoint path_to/ola_adapter_weight.bin
+```
+
+## ❤️ Citation
+If you find our work inspiring or use our codebase in your research, please cite our work:
+```
+@inproceedings{liang2025order,
+  title={Order-Level Attention Similarity Across Language Models: A Latent Commonality},
+  author={Liang, Jinglin and Zhong, Jin and Huang, Shuangping and Hu, Yunqing and Zhang, Huiyuan and Li, Huifang and Fan, Lixin and Gu, Hanlin},
+  booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems},
+  year={2025}
+}
 ```

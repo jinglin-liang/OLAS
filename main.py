@@ -74,7 +74,6 @@ def main():
 
     if not training_args.do_visualize:
         # create data manager
-        pad_to_multiple_of = data_args.pad_to_multiple_of if model_args.adapter_architecture != "tokencls_unet" else 32
         data_manager = DataManager(
             dataset_name=data_args.dataset_name,
             cutoff_len=data_args.cutoff_len,
@@ -82,7 +81,7 @@ def main():
             test_model_name_or_paths=model_args.eval_models_name_list,
             use_generated_oladata=data_args.use_generated_oladata,
             attn_type=data_args.attn_type,
-            pad_to_multiple_of=pad_to_multiple_of,
+            pad_to_multiple_of=data_args.pad_to_multiple_of,
             do_classify_data_generate=data_args.do_classify_data_generate,
             classify_sentence_len=data_args.classify_sentence_len,
             classify_sentence_num=data_args.classify_sentence_num

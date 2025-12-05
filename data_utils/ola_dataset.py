@@ -22,14 +22,8 @@ def get_oladata_dir_path(dataset_name, model_name_or_path, split, attn_type, do_
     data_root_dir = data_root_dir + "_" + attn_type
     if dataset_name == "conll2000_pos":
         data_root_dir = data_root_dir + "_pos"
-    elif dataset_name == "conll2000_chunk":
-        data_root_dir = data_root_dir + "_chunk"
-    elif dataset_name == "conll2012cn_pos":
-        data_root_dir = data_root_dir + "_cn_pos"
     elif dataset_name == "conll2012en_pos":
         data_root_dir = data_root_dir + "_en_pos"
-    elif dataset_name == "conll2012cn_entity":
-        data_root_dir = data_root_dir + "_cn_entity"
     elif dataset_name == "conll2012en_entity":
         data_root_dir = data_root_dir + "_en_entity"
     if do_classify_data_generate:
@@ -183,7 +177,7 @@ class OLADataset_conll2012:
         self.named_entities_names = named_entities_names
         self.data = []
         id = -1
-        for document in raw_train_data:
+        for document in tqdm(raw_train_data, desc="Processing conll2012 data"):
             for sentence in document['sentences']:
                 id += 1
                 tokens = sentence['words']

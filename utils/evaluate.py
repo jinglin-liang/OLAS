@@ -329,9 +329,9 @@ def evaluate_ola_adapter_with_multi_llms(
             shuffle=False,
         )
         # load eval metric
-        if data_manager.dataset_name.lower() in ["imdb", "semeval_re"]:
+        if data_manager.dataset_name.lower() in ["semeval_re"]:
             eval_metric = TextClsMetric()
-        elif data_manager.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos", "conll2012cn_pos"]:
+        elif data_manager.dataset_name.lower() in ["conll2000_pos", "conll2012en_pos"]:
             if hasattr(eval_dataset.datasets[0], "features"):
                 try:
                     label_names = eval_dataset.datasets[0].features["pos_tags"].feature.names
@@ -347,12 +347,7 @@ def evaluate_ola_adapter_with_multi_llms(
                 label_names=label_names,
                 tokenizer=data_manager.tokenizer_dict[eval_model_name],
             )
-        elif data_manager.dataset_name.lower() == "conll2000_chunk":
-            eval_metric = TokenClsMetric(
-                label_names=eval_dataset.datasets[0].features["chunk_tags"].feature.names,
-                tokenizer=data_manager.tokenizer_dict[eval_model_name],
-            )
-        elif data_manager.dataset_name.lower() in ["conll2012en_entity", "conll2012cn_entity"]:
+        elif data_manager.dataset_name.lower() in ["conll2012en_entity"]:
             if hasattr(eval_dataset.datasets[0], "features"):
                 eval_metric = MultiTokenMetric(
                     label_names=eval_dataset.datasets[0].features["named_entities_names"],
@@ -363,7 +358,7 @@ def evaluate_ola_adapter_with_multi_llms(
                     label_names=eval_dataset.datasets[0].named_entities_names,
                     tokenizer=data_manager.tokenizer_dict[eval_model_name],
                 )
-        elif data_manager.dataset_name.lower() in ["ud_english_gum", "ud_english_ewt"]:
+        elif data_manager.dataset_name.lower() in ["ud_english_ewt"]:
             eval_metric = DependencyParsingMetric(
                 tokenizer=data_manager.tokenizer_dict[eval_model_name],
             )

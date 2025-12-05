@@ -5,35 +5,13 @@ from datasets import load_dataset
 from conllu import parse_incr
 
 
-
-
 DATASET_NAME_TO_PATH = {
-    "imdb": "datasets/imdb",
     "conll2000_pos": "datasets/conll2000/conll2000.py",
-    "conll2000_chunk": "datasets/conll2000/conll2000.py",
-    "conll2012cn_pos": "datasets/conll2012/conll2012_ontonotesv5.py",
     "conll2012en_pos": "datasets/conll2012/conll2012_ontonotesv5.py",
-    "conll2012cn_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
     "conll2012en_entity": "datasets/conll2012/conll2012_ontonotesv5.py",
     "semeval_re": "datasets/sem_eval_2010_task_8/data",
     "ud_english_ewt": "datasets/ud_english_ewt",
 }
-
-
-def imdb_standardize_function(data_point, tokenizer, cutoff_len, **kwargs):
-    text = data_point["text"]
-    tokenized_text = tokenizer(
-        text,
-        truncation=True,
-        max_length=cutoff_len,
-        padding=False,
-        return_tensors=None,
-    )
-    return {
-        "input_ids": tokenized_text["input_ids"],
-        "attention_mask": tokenized_text["attention_mask"],
-        "label": data_point["label"],
-    }
 
 
 def conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names):
@@ -104,12 +82,6 @@ def conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_n
 def conll2000_pos_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names):
     ret = conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names)
     ret["labels"] = ret["token_pos_tags"]
-    return ret
-
-
-def conll2000_chunk_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names):
-    ret = conll2000_standardize_function(data_point, tokenizer, cutoff_len, pos_tags_names, chunk_tags_names)
-    ret["labels"] = ret["token_chunk_tags"]
     return ret
 
 
@@ -263,27 +235,11 @@ def load_raw_data(data_name: str):
     train_data and test_data are datasets.Dataset
     standardize_function is a function that takes a data point and returns a standardized data point {"text": str, "label": int}
     '''
-    if data_name.lower() == "imdb":
-        data = load_dataset(DATASET_NAME_TO_PATH[data_name])
-        train_data = data["train"]
-        test_data = data["test"]
-        # unsupervised_data = data["unsupervised"]
-        return (train_data, test_data), imdb_standardize_function
-    elif data_name.lower() == "conll2000_pos":  # conll2000 pos tagging
+    if data_name.lower() == "conll2000_pos":  # conll2000 pos tagging
         data = load_dataset(DATASET_NAME_TO_PATH[data_name], trust_remote_code=True)
         train_data = data["train"]
         test_data = data["test"]
         return (train_data, test_data), conll2000_pos_standardize_function
-    elif data_name.lower() == "conll2000_chunk":  # conll2000 text chunking
-        data = load_dataset(DATASET_NAME_TO_PATH[data_name], trust_remote_code=True)
-        train_data = data["train"]
-        test_data = data["test"]
-        return (train_data, test_data), conll2000_chunk_standardize_function
-    elif data_name.lower() in ["conll2012cn_pos", "conll2012cn_entity"]:  # conll2012 pos tagging
-        data = load_dataset(DATASET_NAME_TO_PATH[data_name], 'chinese_v4', trust_remote_code=True)
-        train_data = data["train"]
-        test_data = data["test"]
-        return (train_data, test_data), None
     elif data_name.lower() in ["conll2012en_pos", "conll2012en_entity"]:  # conll2012 pos tagging
         data = load_dataset(DATASET_NAME_TO_PATH[data_name], 'english_v4', trust_remote_code=True)
         train_data = data["train"]
@@ -293,12 +249,6 @@ def load_raw_data(data_name: str):
         data = load_dataset(DATASET_NAME_TO_PATH[data_name])
         train_data = data["train"]
         test_data = data["test"]
-        return (train_data, test_data), None
-    elif data_name.lower() == "ud_english_gum":
-        train_data = UniversalDependenciesDatasetReader()
-        train_data.load("datasets/UD_English-GUM/en_gum-ud-train.conllu")
-        test_data = UniversalDependenciesDatasetReader()
-        test_data.load("datasets/UD_English-GUM/en_gum-ud-test.conllu")
         return (train_data, test_data), None
     elif data_name.lower() == "ud_english_ewt":
         train_data = UniversalDependenciesDatasetReader()

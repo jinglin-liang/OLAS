@@ -28,7 +28,7 @@ class ModelArguments:
         }
     )
     adapter_architecture: Optional[str] = field(
-        default="textcls_resnet18",
+        default="tokencls_axialtranformer",
         metadata={
             "help": "The architecture of the adapter to use."
         },

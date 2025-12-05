@@ -1,44 +1,16 @@
-import torch
-from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
-from tqdm import tqdm
-import numpy as np
 import random
+from tqdm import tqdm
+import lmdb
+import pickle
+import argparse
 
-import lmdb, pickle
-
+import numpy as np
 import torch
-from torch import nn
-import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torchvision import transforms
-from transformers import set_seed
-import torch
-from torch.utils.data import DataLoader
-from transformers import (
-    set_seed,
-    HfArgumentParser,
-)
+from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
 
-from utils import (
-    ADAPTERS_CKPT_NAME,
-    save_arguments,
-    visualize_attn_map,
-    TextClsMetric,
-    TokenClsMetric,
-    MultiTokenMetric,
-    ModelArguments, 
-    DataArguments, 
-    OLALMTrainingArguments as TrainingArguments,
-    OLALMTrainer,
-)
-from utils.visualize import draw_attn_heatmap
-from data_utils import (
-    generate_save_ola_data,
-    get_oladata_dir_path,
-    DataManager,
-)
-from models.ola_model import OLAModel
 from models.ola_utils import cal_maskes
 from models.ola_model import preprocess_ola
 from models.ola_augmentations import (
@@ -140,6 +112,7 @@ class ClassifyDataset(Dataset):
         else:
             self.ola_augments = None
 
+
 def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
@@ -148,66 +121,75 @@ def setup_seed(seed):
     random.seed(seed)
     cudnn.deterministic = True
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=2025, help='random seed')
+    parser.add_argument("--src_model", type=str, choices=[
+            'bert-base-cased', 'bert-large-cased', 
+            'roberta-base', 'roberta-large',
+            'electra-base-generator', 'electra-large-generator',
+            'Qwen2-1.5B-Instruct', 'Qwen2-7B-Instruct', 
+            'gemma-2-2b-it', 'gemma-2-9b-it', 
+            'Llama-3.2-3B-Instruct', 'Llama-3.1-8B-Instruct'
+        ], help="source model")
+    parser.add_argument("--tgt_model", type=str, choices=[
+            'bert-base-cased', 'bert-large-cased', 
+            'roberta-base', 'roberta-large',
+            'electra-base-generator', 'electra-large-generator',
+            'Qwen2-1.5B-Instruct', 'Qwen2-7B-Instruct', 
+            'gemma-2-2b-it', 'gemma-2-9b-it', 
+            'Llama-3.2-3B-Instruct', 'Llama-3.1-8B-Instruct'
+        ], help="target model")
+    parser.add_argument('--selected_orders', type=int, nargs='+', default=[1], help='selected OLA orders')
+    args = parser.parse_args()
+    return args
+
+
 if __name__ == "__main__":
-    setup_seed(2025)
+    args = parse_args()
+    setup_seed(args.seed)
 
-    # model_pairs = [(1,3), (3,1), (1,5), (5,1), (3,5), (5,3)]
-    # model_pairs = [(1, 2), (1, 3), (1, 4), (1, 5), (2, 1), (2, 3), (2, 4), (2, 5), (3, 1), (3, 2), (3, 4), (3, 5), (4, 1), (4, 2), (4, 3), (4, 5), (5, 1), (5, 2), (5, 3), (5, 4)]
-    model_pairs = [(1, 6), (2, 6), (3, 6), (4, 6), (5, 6), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5)]
-    for model_pair in model_pairs:
-        # ams = {1:'bert-base-cased', 2:'bert-large-cased', 3:'roberta-base', 4:'roberta-large', 5:'electra-base-generator', 6:'electra-large-generator'}
-        ams = {1:'Qwen2-1.5B-Instruct', 2:'Qwen2-7B-Instruct', 3:'gemma-2-2b-it', 4:'gemma-2-9b-it', 5:'Llama-3.2-3B-Instruct', 6:'Llama-3.1-8B-Instruct'}
-        model1_name = ams[model_pair[0]]
-        model2_name = ams[model_pair[1]]
-        selected_orders = [1]
-        sentence_len = 50
-        use_augment = False
-        attn_type = 'ola'
-        sentence_num_perdir = 1000
+    model1_name = args.tgt_model
+    model2_name = args.src_model
+    selected_orders = args.selected_orders
+    sentence_len = 50
+    use_augment = False
+    attn_type = 'ola'
+    sentence_num_perdir = 1000
 
-        data_dir_path1 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model1_name}/train']
-        data_dir_path2 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin/{model2_name}/train']
-        dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
-        dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
-        print(f"dataset1_len = {len(dataset1)}, dataset2_len = {len(dataset2)}")
+    data_dir_path1 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin_seed2025/{model1_name}/train']
+    data_dir_path2 = [f'datasets/conll2012_{attn_type}_en_entity_classify_len50_num2000_origin_seed2025/{model2_name}/train']
+    dataset1 = ClassifyDataset(data_dir_path1, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
+    dataset2 = ClassifyDataset(data_dir_path2, selected_orders, use_augment=use_augment, sentence_len=sentence_len, sentence_num_perdir=sentence_num_perdir)
+    print(f"dataset1_len = {len(dataset1)}, dataset2_len = {len(dataset2)}")
 
-        metric_name = 'ssim'
-        if metric_name == 'ssim':
-            metric = StructuralSimilarityIndexMeasure().to('cuda')
-        elif metric_name == 'psnr':
-            metric = PeakSignalNoiseRatio().to('cuda')
+    metric_name = 'ssim'
+    if metric_name == 'ssim':
+        metric = StructuralSimilarityIndexMeasure().to('cuda')
+    elif metric_name == 'psnr':
+        metric = PeakSignalNoiseRatio().to('cuda')
 
-        hit_num = [1, 3, 5, 8, 10]
-        acc = {f"hit@{hit}":0 for hit in hit_num}
-        print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num}")
-        bar = tqdm(enumerate(dataset1), desc='datas')
-        for idx1, data1 in bar:
-            metric_value_list = []
-            for idx2, data2 in enumerate(dataset2):
-                attn1, attn2 = data1['attn_map'].unsqueeze(0).to('cuda'), data2['attn_map'].unsqueeze(0).to('cuda')
-                metric_value = metric(attn1, attn2).item()
-                metric_value_list.append(metric_value)
-            target_value = metric_value_list[idx1]
-            sorted_list = sorted(metric_value_list, reverse=True)
-            target_pos = sorted_list.index(target_value) + 1
-            for hit in hit_num:
-                if target_pos <= hit:
-                    acc[f"hit@{hit}"] += 1
-            postfix_str = ""
-            for k, v in acc.items():
-                postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1)} " 
-            bar.set_postfix_str(postfix_str)
-        print(postfix_str)
-        print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num} finish.")
-        print(f"hit@1/hit@5: {(acc['hit@1']*100/sentence_num_perdir):.2f}/{(acc['hit@5']*100/sentence_num_perdir):.2f}")
-    
-
-# 计算 PSNR 值
-# psnr_value = psnr_metric(tensor1, tensor2)
-# print(f"PSNR: {psnr_value.item():.4f}")
-
-# # 你也可以在计算时指定数据范围 (data_range)，如果你的 tensor 值不在 0 到 1 之间
-# # 例如，如果你的 tensor 值在 0 到 255 之间：
-# psnr_metric_range = PeakSignalNoiseRatio(data_range=255.0)
-# psnr_value_range = psnr_metric_range(tensor1 * 255, tensor2 * 255) # 将 tensor 值缩放到 0-255
-# print(f"PSNR (data_range=255): {psnr_value_range.item():.4f}")
+    hit_num = [1, 5]
+    acc = {f"hit@{hit}":0 for hit in hit_num}
+    print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num}")
+    bar = tqdm(enumerate(dataset1), desc='datas')
+    for idx1, data1 in bar:
+        metric_value_list = []
+        for idx2, data2 in enumerate(dataset2):
+            attn1, attn2 = data1['attn_map'].unsqueeze(0).to('cuda'), data2['attn_map'].unsqueeze(0).to('cuda')
+            metric_value = metric(attn1, attn2).item()
+            metric_value_list.append(metric_value)
+        target_value = metric_value_list[idx1]
+        sorted_list = sorted(metric_value_list, reverse=True)
+        target_pos = sorted_list.index(target_value) + 1
+        for hit in hit_num:
+            if target_pos <= hit:
+                acc[f"hit@{hit}"] += 1
+        postfix_str = ""
+        for k, v in acc.items():
+            postfix_str = postfix_str + f"{k}={v * 100 / (idx1 + 1):.4f} "
+        bar.set_postfix_str(postfix_str)
+    print(postfix_str)
+    print(f"model1{model1_name}, model2{model2_name}, hit@{hit_num} finish.")
+    print(f"hit@1/hit@5: {(acc['hit@1']*100/sentence_num_perdir):.2f}/{(acc['hit@5']*100/sentence_num_perdir):.2f}")

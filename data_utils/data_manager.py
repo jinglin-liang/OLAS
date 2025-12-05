@@ -1,6 +1,8 @@
+import os
 import functools
 from typing import List, Dict, Any
 import json
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import ConcatDataset
@@ -145,24 +147,12 @@ class DataManager:
             "test": {},
         }
 
-        do_cnt = False
-        if do_cnt:
-            cnt = 0
-            for i in range(len(raw_train_data)):
-                for j in range(len(raw_train_data[i]['sentences'])):
-                    cnt += len(raw_train_data[i]['sentences'][j]['words'])
-            for i in range(len(raw_test_data)):
-                for j in range(len(raw_test_data[i]['sentences'])):
-                    cnt += len(raw_test_data[i]['sentences'][j]['words'])
-            cnt = cnt/84666
-
-
         kwargs = {}
         kwargs["cutoff_len"] = self.cutoff_len
-        if dataset_name in ["conll2000_pos", "conll2000_chunk"]:
+        if dataset_name in ["conll2000_pos"]:
             kwargs["pos_tags_names"] = raw_train_data.features["pos_tags"].feature.names
             kwargs["chunk_tags_names"] = raw_train_data.features["chunk_tags"].feature.names
-        if dataset_name in ["conll2012cn_pos", "conll2012cn_entity", "conll2012en_pos", "conll2012en_entity"]:
+        if dataset_name in ["conll2012en_pos", "conll2012en_entity"]:
             kwargs["pos_tags_names"] = raw_train_data.features['sentences'][0]['pos_tags'].feature.names
             kwargs["named_entities_names"] = raw_train_data.features['sentences'][0]['named_entities'].feature.names
         if dataset_name == "semeval_re":
@@ -171,50 +161,36 @@ class DataManager:
         if do_classify_data_generate:
             final_sentence_len = classify_sentence_len
             sentence_num = classify_sentence_num
+            classify_data_cache_json = f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json'
+            use_generated_classify_data = os.path.exists(classify_data_cache_json)
             print(f"per sentence len={final_sentence_len}, sentence_num={sentence_num}")
-            use_generated_classify_data = True
-            assert dataset_name in ["conll2012en_entity", "imdb"]
+            assert dataset_name == "conll2012en_entity"
             if use_generated_classify_data:
-                if dataset_name == "conll2012en_entity":
-                    file_name = "conll2012_classify_sentences"
-                elif dataset_name == "imdb":
-                    file_name = "imdb_classify_sentences"
-                else:
-                    raise NotImplementedError
-                with open(f'datasets/{file_name}/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'r') as f:
+                print(f"use generated classify sentences {classify_data_cache_json}")
+                with open(classify_data_cache_json, 'r') as f:
                     final_sentences = json.load(f)
                 final_sentences = final_sentences[:sentence_num]
             else:
+                print(f"generating classify sentences and save to {classify_data_cache_json}")
                 final_sentences = []
-                if dataset_name == "conll2012en_entity":
-                    for document_id in range(raw_train_data.__len__()):
-                        tmp_doc_words = []
-                        for sentence_id in range(len(raw_train_data[document_id]['sentences'])):
-                            tmp_doc_words.extend(raw_train_data[document_id]['sentences'][sentence_id]['words'])
-                            if len(tmp_doc_words) >= final_sentence_len:
-                                final_sentences.append(tmp_doc_words[:final_sentence_len])
-                                tmp_doc_words = []
-                            if len(final_sentences) >= sentence_num:
-                                break
-                    final_sentences = final_sentences[:sentence_num]
-                    print("final sentence num =", len(final_sentences))
-                    with open(f'datasets/conll2012_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
-                        json.dump(final_sentences, f)
-                elif dataset_name == 'imdb':
-                    for data in raw_train_data:
-                        tmp_doc_words = data['text'].split()
-                        if len(tmp_doc_words) >= final_sentence_len and len(tmp_doc_words) < (final_sentence_len + 10):
-                            final_sentences.append(tmp_doc_words)
-                        elif len(tmp_doc_words) >= (final_sentence_len + 10):
+                pbar = tqdm(range(len(raw_train_data)))
+                for document_id in pbar:
+                    tmp_doc_words = []
+                    for sentence_id in range(len(raw_train_data[document_id]['sentences'])):
+                        tmp_doc_words.extend(raw_train_data[document_id]['sentences'][sentence_id]['words'])
+                        if len(tmp_doc_words) >= final_sentence_len:
                             final_sentences.append(tmp_doc_words[:final_sentence_len])
+                            tmp_doc_words = []
+                            pbar.set_postfix_str(f"{len(final_sentences)}/{sentence_num}")
                         if len(final_sentences) >= sentence_num:
                             break
-                        final_sentences = final_sentences[:sentence_num]
-                    print("final sentence num =", len(final_sentences))
-                    with open(f'datasets/imdb_classify_sentences/classify_sentences_len{final_sentence_len}_num{sentence_num}.json', 'w') as f:
-                        json.dump(final_sentences, f)
-                else:
-                    raise NotImplementedError
+                    if len(final_sentences) >= sentence_num:
+                        break
+                final_sentences = final_sentences[:sentence_num]
+                print("final sentence num =", len(final_sentences))
+                os.makedirs(os.path.dirname(classify_data_cache_json), exist_ok=True)
+                with open(classify_data_cache_json, 'w') as f:
+                    json.dump(final_sentences, f)
                 print("save final sentences done")
 
         for tmp_train_model in train_model_name_or_paths:
@@ -229,11 +205,6 @@ class DataManager:
                 kwargs["task"] = dataset_name.split("_")[-1]
                 kwargs["cutoff_len"] = final_sentence_len + 100
                 self.data["train"][tmp_train_model] = ClassifyDataset(final_sentences, **kwargs)
-            elif dataset_name in ["conll2012cn_pos", "conll2012cn_entity"]:
-                kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
-                kwargs["language"] = "cn"
-                kwargs["task"] = dataset_name.split("_")[-1]
-                self.data["train"][tmp_train_model] = OLADataset_conll2012(raw_train_data, **kwargs)
             elif dataset_name in ["conll2012en_pos", "conll2012en_entity"]:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 kwargs["language"] = "en"
@@ -242,7 +213,7 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 self.data["train"][tmp_train_model] = OLADataset_SemEvalRe(raw_train_data, **kwargs)
-            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+            elif dataset_name == "ud_english_ewt":
                 kwargs["min_freq"] = 2
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_train_model]
                 vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
@@ -266,11 +237,6 @@ class DataManager:
                 self.data["test"][tmp_test_model] = OLADataset(data_dir_path)
             elif do_classify_data_generate:
                 self.data["test"][tmp_test_model] = None
-            elif dataset_name in ["conll2012cn_pos","conll2012cn_entity"]:
-                kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
-                kwargs["language"] = "cn"
-                kwargs["task"] = dataset_name.split("_")[-1]
-                self.data["test"][tmp_test_model] = OLADataset_conll2012(raw_test_data, **kwargs)
             elif dataset_name in ["conll2012en_pos","conll2012en_entity"]:
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 kwargs["language"] = "en"
@@ -279,7 +245,7 @@ class DataManager:
             elif dataset_name == "semeval_re":
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 self.data["test"][tmp_test_model] = OLADataset_SemEvalRe(raw_test_data, **kwargs)
-            elif dataset_name in ["ud_english_gum", "ud_english_ewt"]:
+            elif dataset_name == "ud_english_ewt":
                 kwargs["min_freq"] = 2
                 kwargs["tokenizer"] = self.tokenizer_dict[tmp_test_model]
                 vocab = UddpPreProcessor.from_corpus(raw_train_data, **kwargs)
@@ -312,14 +278,14 @@ class DataManager:
             [self.data[split][model_name_or_path] for model_name_or_path in model_name_list]
         )
 
-        if self.dataset_name in ["conll2000_pos", "conll2000_chunk", "conll2012cn_pos", "conll2012en_pos", "conll2012cn_entity", "conll2012en_entity"]:
+        if self.dataset_name in ["conll2000_pos", "conll2012en_pos", "conll2012en_entity"]:
             base_data_collator = DataCollatorForTokenClassification(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
                 max_length=self.cutoff_len,
                 pad_to_multiple_of=self.pad_to_multiple_of
             )
-        elif self.dataset_name in ["imdb", "semeval_re", "ud_english_gum", "ud_english_ewt"]:
+        elif self.dataset_name in ["semeval_re", "ud_english_ewt"]:
             base_data_collator = DataCollatorWithPadding(
                 tokenizer=self.tokenizer_dict[model_name_list[0]],
                 padding="longest",
