@@ -27,27 +27,27 @@ pip install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable
 ### Prepare Data
 Create a folder named 'datasets', download the dataset, and place it under the file structure as shown below.
 >datasets
-|-- [UD_English-EWT](https://lindat.mff.cuni.cz/repository/items/48b5bcf3-697e-4924-bb2f-29f189491889)
-|-- [conll2000](https://huggingface.co/datasets/eriktks/conll2000)
-|-- [conll2012](https://huggingface.co/datasets/ontonotes/conll2012_ontonotesv5)
-|-- [sem_eval_2010_task_8](https://huggingface.co/datasets/SemEvalWorkshop/sem_eval_2010_task_8)
+>|-- [UD_English-EWT](https://lindat.mff.cuni.cz/repository/items/48b5bcf3-697e-4924-bb2f-29f189491889)
+>|-- [conll2000](https://huggingface.co/datasets/eriktks/conll2000)
+>|-- [conll2012](https://huggingface.co/datasets/ontonotes/conll2012_ontonotesv5)
+>|-- [sem_eval_2010_task_8](https://huggingface.co/datasets/SemEvalWorkshop/sem_eval_2010_task_8)
 
 
 ### Pre-trained Model
 Download the pretrained models and place them in the newly created "pretrained_models" folder.
 > pretrained_models
-|-- [bert-base-cased](https://huggingface.co/google-bert/bert-base-cased)
-|-- [bert-large-cased](https://huggingface.co/google-bert/bert-large-cased)
-|-- [roberta-base](https://huggingface.co/FacebookAI/roberta-base)
-|-- [roberta-large](https://huggingface.co/FacebookAI/roberta-large)
-|-- [electra-base-generator](https://huggingface.co/google/electra-base-generator)
-|-- [electra-large-generator](https://huggingface.co/google/electra-large-generator)
-|-- [gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it)
-|-- [gemma-2-9b-it](https://huggingface.co/google/gemma-2-9b-it)
-|-- [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct)
-|-- [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
-|-- [Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
-|-- [Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
+>|-- [bert-base-cased](https://huggingface.co/google-bert/bert-base-cased)
+>|-- [bert-large-cased](https://huggingface.co/google-bert/bert-large-cased)
+>|-- [roberta-base](https://huggingface.co/FacebookAI/roberta-base)
+>|-- [roberta-large](https://huggingface.co/FacebookAI/roberta-large)
+>|-- [electra-base-generator](https://huggingface.co/google/electra-base-generator)
+>|-- [electra-large-generator](https://huggingface.co/google/electra-large-generator)
+>|-- [gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it)
+>|-- [gemma-2-9b-it](https://huggingface.co/google/gemma-2-9b-it)
+>|-- [Qwen2-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct)
+>|-- [Qwen2-7B-Instruct](https://huggingface.co/Qwen/Qwen2-7B-Instruct)
+>|-- [Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct)
+>|-- [Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
 
 ## 📺 Qualitative Empirical Evidence of OLAS
 
